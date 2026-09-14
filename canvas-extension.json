@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "name": "insider-cat",
+  "display_name": "Insider Cat",
+  "version": "0.1.0",
+  "description": "Projects and a durable Insider Cat conversation on this Agent Server.",
+  "entrypoint": "extension.js",
+  "contributes": {
+    "pages": [
+      {
+        "id": "projects",
+        "title": "Insider Cat Projects",
+        "path": "/projects",
+        "nav_label": "Projects",
+        "description": "Find work, select a conversation, and talk to Insider Cat."
+      }
+    ]
+  }
+}
