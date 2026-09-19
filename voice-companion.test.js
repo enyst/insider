@@ -154,7 +154,7 @@ describe("Voice companion", () => {
     },
   );
 
-  it("shows provider and latest transcripts as text, with supported controls only", () => {
+  it("keeps transcripts optional and safely rendered, with supported controls only", () => {
     mocked.snapshot = {
       status: "listening",
       controllerId: "cat-a",
@@ -177,7 +177,8 @@ describe("Voice companion", () => {
     const query = (role) => container.querySelector(`[data-role="${role}"]`);
     const button = (action) =>
       container.querySelector(`[data-action="${action}"]`);
-    expect(query("provider").textContent).toBe("Codex");
+    expect(query("provider")).toBeNull();
+    expect(query("transcripts").open).toBe(false);
     expect(query("transcripts").textContent).toContain("user: <b>Hello</b>");
     expect(query("transcripts").querySelector("b")).toBeNull();
     expect(button("interrupt").hidden).toBe(true);
@@ -190,9 +191,31 @@ describe("Voice companion", () => {
       transcripts: {},
     };
     mocked.onChange();
-    expect(query("provider").textContent).toBe("OpenAI API");
+    expect(query("provider")).toBeNull();
     expect(query("transcripts").hidden).toBe(true);
     expect(button("interrupt").hidden).toBe(false);
+    mocked.snapshot = { ...mocked.snapshot, muted: true, status: "speaking" };
+    mocked.onChange();
+    expect(query("voice-status").textContent).toBe("voiceSpeaking");
+    expect(container.querySelector(".insider-cat-avatar").dataset.pose).toBe(
+      "speaking",
+    );
+    expect(button("mute").getAttribute("aria-pressed")).toBe("true");
+    mocked.snapshot = {
+      ...mocked.snapshot,
+      status: "listening",
+      requestPending: true,
+    };
+    mocked.onChange();
+    expect(query("voice-status").textContent).toBe("voiceThinking");
+    expect(container.querySelector(".insider-cat-avatar").dataset.pose).toBe(
+      "working",
+    );
+    mocked.snapshot = { status: "idle", requestPending: false };
+    mocked.onChange();
+    expect(container.querySelector(".insider-cat-avatar").dataset.pose).toBe(
+      "sleeping",
+    );
     unmount();
     dispose();
   });

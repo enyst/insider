@@ -1,6 +1,6 @@
 # Insider Cat
 
-A Projects page and a durable typed companion for **Agent Canvas**. Insider Cat
+A Cat-first Projects page and a durable companion for **Agent Canvas**. Insider Cat
 is a sibling of SmolPaws, with its own conversation and the capabilities supplied
 by its configured agent profile.
 
@@ -33,6 +33,11 @@ dependencies or run a build.
 
 ## What it does
 
+- Put the Cat, its messages, and **Talk** at the center of the page. The SVG Cat
+  rests, wakes, listens, speaks, and works as its state changes. Conversation
+  browsing sits under **Your work**; the page has one set of voice controls.
+  The September 19, 2026 redesign supports reduced motion and keeps errors and
+  approval requests visible as text, alongside the Cat's pose.
 - Browse conversations with workspace and title/ID filters, manual refresh, and
   explicit pagination. Filters apply to loaded conversations; the page shows its
   coverage. Approval requests, errors, paused work, and ended runs have distinct
@@ -41,7 +46,7 @@ dependencies or run a build.
   Opening a conversation stays inside Canvas.
 - Discover saved Cat controllers across all conversation-list pages. A single
   controller resumes automatically; multiple controllers require a choice.
-  **New Cat conversation** creates a separate controller on the first send.
+  **New Cat** creates a separate controller on the first send.
   The App remembers the last chosen controller for its backend and organization,
   then verifies its Insider tags when loading it again. `/new` prepares a fresh
   Cat without sending that command to the previous conversation. Controllers
@@ -58,8 +63,8 @@ dependencies or run a build.
 - `/condense` condenses the selected controller without changing its identity or
   starting another agent turn. Resolve running work or approval requests first.
   Requesting compaction from the App or the updated regular Canvas view ends
-  that Cat's active voice call, even if compaction later fails. Click **Start
-  voice** after it completes to load the current context. Opening the full Cat
+  that Cat's active voice call, even if compaction later fails. Click **Talk**
+  after it completes to load the current context. Opening the full Cat
   conversation and returning to its App page keeps the same conversation ID.
   Automatic call cleanup for regular-view compaction requires the host's
   `onConversationContextChangeRequested` capability. Without it, end voice
@@ -72,15 +77,16 @@ App adds no worker dispatcher, scheduler, or shared SmolPaws memory.
 Drafts survive navigation while the App remains active. They are not saved
 across browser reloads, App disablement, or backend switches. If a send has an
 uncertain outcome, inspect the saved conversation before sending again. Leaving
-the page stops its polling without cancelling work already accepted by the
-server.
+the page stops its history polling without cancelling work already accepted by
+the server. Away from Projects, the companion checks the Cat's status every
+2.5 seconds while running, or every 10 seconds otherwise.
 
 ## Voice
 
-Agent Server selects the voice provider. The controls identify it as **OpenAI
-API** or **Codex**. Both use WebRTC and keep the saved OpenHands Cat as the task
-controller. The server handles authentication and the SDP exchange; the browser
-receives no provider credentials.
+Agent Server selects the voice provider: OpenAI API or Codex. Provider labels
+stay out of the conversation controls. Both use WebRTC and keep the saved
+OpenHands Cat as the task controller. The server handles authentication and the
+SDP exchange; the browser receives no provider credentials.
 
 The OpenAI API transport uses `gpt-realtime-2.1` and requires a standard OpenAI
 API key. This transport does not use a ChatGPT subscription session or assume
@@ -151,17 +157,17 @@ the full answer is in the conversation. The saved answer remains complete.
 The browser's missing-sign-in message appears before microphone access.
 
 On a Canvas version with companion controls, choose a saved Cat and select
-**Start voice** beside the Cat picker or in the companion controls. Before a
-Cat is selected, the page keeps the button visible and explains that you must
-choose a saved conversation or send the first message to create one.
+**Talk**. Choose a saved conversation, or select **New Cat** and send the first
+message to create one.
 Availability is checked before requesting microphone access.
-The controls display the controller identity, provider, status, and latest
-spoken exchange, and remain available while opening other Canvas pages. These
-transient transcript previews do not replace the saved Cat history. **Mute
-microphone** and **End call** work with both providers. **Stop speaking** is
-available for the OpenAI API transport; Codex's current app-server API does not
-expose this operation, so the button is hidden in Codex mode. Ending a call or
-interrupting speech does not cancel accepted agent work.
+The Cat page shows the call state and **Live transcript**. A compact companion
+appears only away from Projects, keeping the call controls available without a
+second voice panel on the Cat page. Navigation preserves the same audio element,
+connection, and Cat identity. The transient transcript does not replace the
+saved Cat history. **Mute**, **Unmute**, and **End call** work with both providers.
+**Stop speaking** is available for the OpenAI API transport; Codex's current
+app-server API does not expose this operation, so the button is hidden in Codex
+mode. Ending a call or interrupting speech does not cancel accepted agent work.
 Changing Cat, starting a new Cat, changing backend, disabling the App, or ending
 the call releases the microphone and closes the connection. Returning to the
 same Cat page keeps the call connected.

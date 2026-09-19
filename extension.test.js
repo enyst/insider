@@ -470,7 +470,9 @@ describe("Insider Cat App", () => {
     expect(find(app, "draft").value).toBe(
       "Please explain the pending decision.",
     );
-    expect(app.container.textContent).toContain(worker.id);
+    expect(app.container.querySelector('[data-role="target"] span').title).toBe(
+      worker.id,
+    );
     click(app, "open-worker");
     expect(app.host.navigate).toHaveBeenCalledWith(
       `/conversations/${worker.id}`,
