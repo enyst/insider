@@ -79,3 +79,30 @@ because their project contains the skill or a document mentions Insider Cat.
 The [App README](../../../README.md) describes installation and testing. The
 [behavior notes](https://enyst.github.io/arch/insider-cat.html) describe the
 App's behavior, architecture, and further coordination work.
+
+## Voice hands work to this agent
+
+As of September 20, 2026, the realtime model is the listening/speaking layer;
+the saved OpenHands Cat is the reasoning and tool-execution layer. Conceptually
+Voice calls `ask_agent(request)` and speaks the verified saved result. The
+OpenAI API transport implements that with `send_to_insider`; the Codex transport
+uses an explicit `handoff_request` that Agent Server dispatches directly. The
+inactive Codex background thread has no tools and is not the Cat's executor.
+
+Task delegation appends a user Message with `run: true`, waits for the actual
+run and stop hooks to settle, and selects the new saved answer. The SDK's
+`/ask_agent` endpoint is a different, stateless question facility; using it here
+would omit durable turns and the normal tool loop.
+
+A saved Cat with `tools: []` is still a real OpenHands agent. It lacks workspace
+and coordination tools even if built-in utilities remain available. An LLM
+profile switch does not install tools, and an active agent profile is a launch
+default for new conversations. Do not silently expand an intentionally limited
+saved agent's permissions as a side effect of connecting Voice.
+
+The App's list API and selected-worker data are not an agent tool. Backend-wide
+counts need an authoritative count query (or complete documented pagination),
+not the number of loaded cards. Recommended future tools should bind backend
+identity in host code, return factual inventory/status results, and keep worker
+mutations explicit and subject to existing approval rules. These tools are not
+installed by this App today.

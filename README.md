@@ -83,6 +83,51 @@ the server. Away from Projects, the companion checks the Cat's status every
 
 ## Voice
 
+The realtime model listens and speaks. The **saved OpenHands Cat** owns the
+conversation, reasons about requests, and runs the tools configured for that
+agent. Its ID stays the same when you switch between Voice and typed chat.
+
+```mermaid
+flowchart LR
+  Person[You] --> Voice[Realtime voice]
+  Voice --> Bridge[Conversation-bound handoff]
+  Bridge --> Cat[Saved OpenHands Cat]
+  Cat --> Tools[Configured tools and approvals]
+  Tools --> Cat
+  Cat --> Result[Verified saved result]
+  Result --> Voice
+  Voice --> Person
+```
+
+Conceptually the handoff is `ask_agent(request)`. The OpenAI API transport calls
+it `send_to_insider`; the Codex transport receives `handoff_request` and dispatches
+it directly on the server. This is not another tool the saved Cat needs to call:
+it is already the agent receiving the delegated request. Do not wire task
+execution to the SDK's similarly named `/ask_agent` endpoint: that endpoint asks
+a stateless question without saving a turn or running the normal agent loop.
+
+**Tools are a separate requirement.** A real OpenHands agent can have an empty
+workspace tool list and only built-in utilities such as `think`, `switch_llm`,
+and `finish`. Switching an LLM profile changes its model, not its tools. Choosing
+an agent profile for new conversations does not retrofit an existing Cat. Inspect
+the saved conversation's actual configuration when diagnosing missing tools.
+
+The App's authenticated conversation browser does not automatically grant the
+Cat backend-query tools. Counting loaded cards is not counting the backend.
+As of September 20, 2026, the App does not install tools to count, list, read,
+create, or message other conversations. The recommended next capability is a
+small set of tools bound to the owning backend: read/count first, then explicit
+worker creation and messaging under the user's existing approval policy. A
+workspace terminal alone is not a documented backend API integration.
+
+For now, both voice transports instruct the realtime model to delegate every
+new request, including greetings and recall, so conversation ownership stays
+clear. Fast acknowledgments can remain in Voice. Allowing Voice to answer small
+talk independently is a future UX choice that also needs deliberate transcript
+persistence; it must not create an unsaved second conversation.
+
+### Provider setup and verification
+
 Agent Server selects the voice provider: OpenAI API or Codex. Provider labels
 stay out of the conversation controls. Both use WebRTC and keep the saved
 OpenHands Cat as the task controller. The server handles authentication and the
@@ -150,6 +195,13 @@ one request and its Cat answer, then returned that answer as spoken audio.
 A fresh call on September 20 then recalled the test word from that same Cat,
 saved its new question and answer, and spoke the correct word. Both calls used
 generated speech, the existing Codex sign-in, and a Luna/high Cat.
+A further September 20 check repaired an early saved Cat that had no workspace
+tools. Adding the standard tools preserved its ID, model, approvals, and all
+existing events. A generated spoken calculation then produced an actual terminal
+action and observation, a saved answer, and the matching spoken result. Voice
+also emitted a misleading waiting acknowledgment before that result; progress
+speech still needs refinement. This test establishes workspace-tool delegation,
+not backend inventory or worker-management capabilities.
 Physical iPad microphone and speaker behavior remain device checks.
 
 Call status includes fixed `error_code` values: `request_not_sent` means the
