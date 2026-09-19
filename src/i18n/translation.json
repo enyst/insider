@@ -1460,5 +1460,39 @@
     "uk": "Транскрипція наживо",
     "zh-CN": "实时转录",
     "zh-TW": "即時轉錄"
+  },
+  "INSIDER_CAT$VOICE_REQUEST_NOT_SENT": {
+    "ar": "لم يُرسل وضع الصوت رسالتك. حاول مجددًا أو اكتبها هنا.",
+    "ca": "La veu no ha enviat el teu missatge. Torna-ho a provar o escriu-lo aquí.",
+    "de": "Deine Sprachnachricht wurde nicht gesendet. Versuche es erneut oder tippe sie hier ein.",
+    "en": "Voice did not send your message. Try again, or type it here.",
+    "es": "La voz no envió tu mensaje. Inténtalo de nuevo o escríbelo aquí.",
+    "fr": "Le mode vocal n’a pas envoyé votre message. Réessayez ou écrivez-le ici.",
+    "it": "La modalità vocale non ha inviato il messaggio. Riprova oppure scrivilo qui.",
+    "ja": "音声からメッセージを送信できませんでした。もう一度試すか、ここに入力してください。",
+    "ko-KR": "음성으로 메시지를 보내지 못했습니다. 다시 시도하거나 여기에 입력하세요.",
+    "no": "Talefunksjonen sendte ikke meldingen din. Prøv igjen, eller skriv den her.",
+    "pt": "A voz não enviou sua mensagem. Tente novamente ou digite-a aqui.",
+    "tr": "Ses özelliği mesajınızı göndermedi. Tekrar deneyin veya buraya yazın.",
+    "uk": "Голосовий режим не надіслав ваше повідомлення. Спробуйте ще раз або введіть його тут.",
+    "zh-CN": "语音未发送你的消息。请重试，或在此输入文字。",
+    "zh-TW": "語音未傳送你的訊息。請重試，或在此輸入文字。"
+  },
+  "INSIDER_CAT$VOICE_RELAY_FAILED": {
+    "ar": "تعذّر على وضع الصوت إكمال هذا الطلب. افتح المحادثة قبل المحاولة مجددًا.",
+    "ca": "La veu no ha pogut completar aquesta petició. Obre el xat abans de tornar-ho a provar.",
+    "de": "Die Sprachanfrage konnte nicht abgeschlossen werden. Öffne den Chat, bevor du es erneut versuchst.",
+    "en": "Voice could not finish this request. Open chat before trying again.",
+    "es": "La voz no pudo completar esta solicitud. Abre el chat antes de volver a intentarlo.",
+    "fr": "Le mode vocal n’a pas pu terminer cette demande. Ouvrez la discussion avant de réessayer.",
+    "it": "La modalità vocale non ha potuto completare questa richiesta. Apri la chat prima di riprovare.",
+    "ja": "音声からの依頼を完了できませんでした。再試行する前にチャットを開いてください。",
+    "ko-KR": "음성 요청을 완료하지 못했습니다. 다시 시도하기 전에 채팅을 여세요.",
+    "no": "Talefunksjonen kunne ikke fullføre forespørselen. Åpne chatten før du prøver igjen.",
+    "pt": "A voz não conseguiu concluir esta solicitação. Abra o chat antes de tentar novamente.",
+    "tr": "Ses özelliği bu isteği tamamlayamadı. Tekrar denemeden önce sohbeti açın.",
+    "uk": "Голосовий режим не зміг завершити цей запит. Відкрийте чат, перш ніж спробувати знову.",
+    "zh-CN": "语音未能完成此请求。请先打开聊天查看，再重试。",
+    "zh-TW": "語音未能完成此請求。請先開啟聊天查看，再重試。"
   }
 }

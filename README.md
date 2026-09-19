@@ -98,13 +98,17 @@ automatically reused for voice.
 
 The experimental Codex transport requires an updated Agent Server configured
 for Codex and a working Codex installation and sign-in on that server. Codex
-provides voice and a separate relay turn whose tool addresses the saved
-OpenHands Cat. The server handles this delegation; the browser never resubmits
-Codex tool calls or transcripts to the Cat. There is no automatic fallback to
-the API-key transport. A live relay call succeeded with the existing Codex
-ChatGPT sign-in on September 16, 2026; other accounts still need their own
-connection check. Codex starts from the saved Cat context; the Projects page's
-selected worker is not added to that voice session.
+provides audio. Agent Server takes the explicit `input_transcript` from each
+`handoff_request` and forwards it to the saved OpenHands Cat, at most once per
+`handoff_id` within that call. Dispatch no longer depends on a reasoning model
+choosing a tool. The server waits for the saved Cat's run to settle and returns
+its verified answer through `appendSpeech`. The pinned app-server may still
+start a background Codex turn, but it has no tools and does not dispatch requests
+or supply the spoken answer. The browser never resubmits Codex handoffs or
+transcripts to the Cat. There is no automatic fallback to the API-key transport.
+Codex starts from the saved Cat context; the Projects page's selected worker is
+not added to that voice session. Live must still emit a handoff; this is not a
+guarantee that every utterance is saved.
 
 On Agent Server, set `OH_VOICE_PROVIDER=codex`. The prototype supports the
 tested `codex-cli 0.154.0` executable. It uses a dedicated Codex home under the
@@ -119,25 +123,42 @@ configuration, plugins, or MCP servers. The pinned 0.154.0 file-store save follo
 the symlink, so refresh updates the shared session file. This setup depends on
 that save behavior and does not apply to keyring storage.
 
-The successful live trial used these settings in the dedicated `config.toml`:
+The September 19, 2026 setup uses these settings in the dedicated `config.toml`:
 
 ```toml
-model = "gpt-5.5"
-model_reasoning_effort = "low"
+model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
 cli_auth_credentials_store = "file"
 ```
 
-The model and effort select the Codex reasoning relay, not the Live voice model.
-The saved OpenHands Cat also used GPT-5.5 in that trial. Three generated spoken
-requests reached `send_to_insider`, produced saved requests and answers, and
-returned through `appendSpeech` across two real calls. The same connected peer
-survived opening the regular conversation view and a follow-up there. After End
-and a fresh call, another saved request correctly recalled the updated test
-word. An earlier trial answered directly from Voice's initial history without
-saving a new request. Stronger Voice and relay instructions preceded the
-successful trials, so delegation remains model-dependent and is not an
-exactly-once guarantee for every utterance. Physical iPad microphone testing and
-broader repeated-call and approval checks remain outstanding.
+The model and effort select the Codex background thread, not the Live audio
+model or the saved Cat's separate agent profile. A real text-only Luna/high
+subscription probe completed successfully. The settings remain unchanged by
+the direct handoff implementation.
+
+Historical verification, September 16, 2026: the previous tool-based relay used
+GPT-5.5 with low effort, and the saved Cat also used GPT-5.5. Three generated
+spoken requests reached `send_to_insider`, produced saved requests and answers,
+and returned through `appendSpeech` across two real calls using an existing
+Codex ChatGPT sign-in. The same peer survived opening the regular conversation;
+a fresh call correctly recalled the updated test word. An earlier trial had
+answered from Voice history without saving a new request. On September 19, the
+Luna/high relay received a handoff but completed without choosing
+`send_to_insider`, so no request reached the Cat. That failure motivated direct
+server dispatch. A real WebRTC test of the direct path on September 19 saved
+one request and its Cat answer, then returned that answer as spoken audio.
+A fresh call on September 20 then recalled the test word from that same Cat,
+saved its new question and answer, and spoke the correct word. Both calls used
+generated speech, the existing Codex sign-in, and a Luna/high Cat.
+Physical iPad microphone and speaker behavior remain device checks.
+
+Call status includes fixed `error_code` values: `request_not_sent` means the
+request was not admitted to the saved Cat; `relay_failed` means its outcome
+needs checking in the chat; `connection_failed` identifies a connection or
+protocol failure. The App maps these codes to translated messages and never
+displays arbitrary backend error text. Missing or unknown codes also show a
+connection error. A second handoff received while the Cat is still working is
+reported as unsent, without cancelling the first request.
 
 If no suitable existing session is available, use Codex's normal login flow in
 the dedicated home, for example:

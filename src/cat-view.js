@@ -157,9 +157,10 @@ export const catViewStyles = `
 .insider-app .cat-muted,.insider-voice .cat-muted{font-size:12px;color:var(--cat-muted);overflow-wrap:anywhere}
 .insider-app button,.insider-app select,.insider-app input,.insider-app textarea,.insider-voice button{font:inherit;color:inherit;border:1px solid var(--cat-line);border-radius:10px;background:transparent;min-height:44px;padding:9px 12px}
 .insider-app button,.insider-voice button{cursor:pointer;touch-action:manipulation}
-.insider-app button:hover,.insider-voice button:hover{border-color:var(--cat-accent);background:#cad7b40a}
+.insider-app button:enabled:hover:not(.cat-primary):not(.cat-talk),.insider-voice button:enabled:hover:not(.cat-talk){border-color:var(--cat-accent);background:#cad7b40a}
 .insider-app button:disabled,.insider-voice button:disabled{cursor:default;opacity:.45}
 .insider-app .cat-primary,.insider-app .cat-talk,.insider-voice .cat-talk{background:var(--cat-accent);color:var(--cat-ink);border-color:var(--cat-accent);font-weight:650}
+.insider-app .cat-primary:enabled:hover,.insider-app .cat-talk:enabled:hover,.insider-voice .cat-talk:enabled:hover{background:#d7e3c2;color:var(--cat-ink);border-color:#d7e3c2}
 .insider-app :is(button,input,select,textarea,summary):focus-visible,.insider-voice :is(button,summary):focus-visible{outline:2px solid var(--cat-accent);outline-offset:3px}
 .insider-app [hidden],.insider-voice[hidden],.insider-voice [hidden]{display:none!important}
 .insider-app .cat-controls,.cat-voice-view .cat-voice-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
