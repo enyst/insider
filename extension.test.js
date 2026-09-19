@@ -525,6 +525,10 @@ describe("Insider Cat App", () => {
     expect(
       create.body.agent_launch_additions.system_message_suffix_append,
     ).toContain("sibling of SmolPaws");
+    // Missing /server_info support does not block launch or invent a backend.
+    expect(
+      create.body.agent_launch_additions.system_message_suffix_append,
+    ).not.toContain("<RUNTIME_SERVICES>");
     expect(create.body.initial_message.content[0].text).toContain(worker.id);
     await waitFor(() => expect(find(app, "send").disabled).toBe(false));
     draft(app, "Continue the explanation.");
@@ -543,6 +547,52 @@ describe("Insider Cat App", () => {
           call.path === "/api/conversations" && call.method === "POST",
       ),
     ).toHaveLength(1);
+  });
+
+  it("adds only its owning backend's advertised runtime context without replacing the active profile", async () => {
+    const app = mountApp({
+      backendId: "backend-two",
+      request: ({ path }) => {
+        if (path === "/server_info")
+          return {
+            runtime_services: {
+              services: {
+                agent_server: {
+                  url_from_agent: "https://agent-two.internal:9443",
+                  auth_key_file_env_var: "OH_SESSION_API_KEY_PATH",
+                },
+              },
+              session_api_key: "test-secret-never-in-prompt",
+            },
+          };
+      },
+    });
+    await waitFor(() =>
+      expect(app.container.textContent).toContain(worker.title),
+    );
+    click(app, "select-worker");
+    draft(app, "Count the conversations here.");
+    click(app, "send");
+    await waitFor(() =>
+      expect(
+        app.request.mock.calls.some(
+          ([call]) =>
+            call.path === "/api/conversations" && call.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const { body } = app.request.mock.calls.find(
+      ([call]) => call.path === "/api/conversations" && call.method === "POST",
+    )[0];
+    expect(body.agent_profile_id).toBe("33333333-3333-4333-8333-333333333333");
+    expect(body).not.toHaveProperty("agent_settings");
+    expect(body).not.toHaveProperty("agent");
+    const suffix = body.agent_launch_additions.system_message_suffix_append;
+    expect(suffix).toContain("Agent Server: https://agent-two.internal:9443/");
+    expect(suffix).toContain("$OH_SESSION_API_KEY_PATH");
+    expect(suffix).toContain("Backend: backend-two");
+    expect(suffix).toContain("<INSIDER_CONTROLLER>");
+    expect(suffix).not.toMatch(/test-secret|localhost|127\.0\.0\.1/);
   });
 
   it("restores the durable controller and shows saved text without leaking selection across backends", async () => {

@@ -18,6 +18,13 @@ instructions. The controller receives the role directly; this path does not
 depend on SDK project skill discovery or an `invoke_skill` tool. Rebuild and
 commit the bundle after changing the skill.
 
+Creation also reads `/server_info` through the bound host request and appends
+validated `runtime_services` metadata: agent-side HTTP(S) addresses and
+environment-variable names for a URL, authentication key, or key-file path.
+It copies no credential values or arbitrary metadata instructions. The host
+must provide those references to the agent process. Absent or unavailable
+metadata is omitted, without substituting a default backend or blocking launch.
+
 Both `smolpaws: insider` and `insiderrole: controller` tags identify saved,
 top-level Cat conversations for discovery. Tags are metadata, not permission
 grants or a skill loader. The profile supplies the model, credentials, and
@@ -100,9 +107,16 @@ profile switch does not install tools, and an active agent profile is a launch
 default for new conversations. Do not silently expand an intentionally limited
 saved agent's permissions as a side effect of connecting Voice.
 
-The App's list API and selected-worker data are not an agent tool. Backend-wide
-counts need an authoritative count query (or complete documented pagination),
-not the number of loaded cards. Recommended future tools should bind backend
-identity in host code, return factual inventory/status results, and keep worker
-mutations explicit and subject to existing approval rules. These tools are not
-installed by this App today.
+Normal OpenHands tools plus enabled skills are the intended starting point.
+The terminal can execute documented Agent Server API requests using
+`openhands-api` and the owning backend's runtime URL and authentication source.
+This supports counting, inspection, and authorized worker operations without
+requiring a bespoke tool for each endpoint. The browser's authenticated access
+is separate: it does not by itself configure the agent's terminal environment.
+
+Backend-wide counts need an authoritative count query; conversation listings
+must follow pagination. Loaded cards are not the backend total. A filesystem
+fallback requires a verified local persistence path and counts distinct
+conversation records, not events. Dedicated backend-bound tools could make
+these operations more convenient, but remain optional. Worker mutations stay
+explicit and subject to existing authorization and approval rules.

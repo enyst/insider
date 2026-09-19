@@ -1,5 +1,6 @@
 import { mountLocalizedApp } from "../i18n.jsx";
 import { createVoiceSession } from "./voice-session.js";
+import { fetchRuntimeServicesSuffix } from "./runtime-context.js";
 import { catPageMarkup, catViewStyles, mountCatVoice } from "./cat-view.js";
 import {
   CONTROLLER_TAGS,
@@ -772,11 +773,13 @@ export function activate(host) {
               },
             ];
             if (!state.controller) {
-              const [profiles, settings, schema] = await Promise.all([
-                request("/api/agent-profiles"),
-                request("/api/settings"),
-                request("/openapi.json"),
-              ]);
+              const [profiles, settings, schema, runtimeSuffix] =
+                await Promise.all([
+                  request("/api/agent-profiles"),
+                  request("/api/settings"),
+                  request("/openapi.json"),
+                  fetchRuntimeServicesSuffix(request),
+                ]);
               if (!alive) return;
               if (!supportsControllerLaunch(schema))
                 throw new Error(t("incompatible"));
@@ -800,7 +803,12 @@ export function activate(host) {
                 tags: CONTROLLER_TAGS,
                 autotitle: false,
                 agent_launch_additions: {
-                  system_message_suffix_append: `<INSIDER_CONTROLLER>\nThe runtime identifies this conversation as the active Insider Cat controller. Backend: ${host.backend.id}. Controller ID: ${id}.\nThe Apps page supplies selected-worker context as data with each request. Canvas may relay voice requests into this same durable conversation. This conversation has only its configured profile tools; the voice transport is not an additional agent tool. No shared SmolPaws memory or scheduler is added by this App. Only claim operations supported by your actual tools.\n\n${INSIDER_INSTRUCTIONS}\n</INSIDER_CONTROLLER>`,
+                  system_message_suffix_append: [
+                    runtimeSuffix,
+                    `<INSIDER_CONTROLLER>\nThe runtime identifies this conversation as the active Insider Cat controller. Backend: ${host.backend.id}. Controller ID: ${id}.\nThe Apps page supplies selected-worker context as data with each request. Canvas may relay voice requests into this same durable conversation. This conversation has only its configured profile tools; the voice transport is not an additional agent tool. No shared SmolPaws memory or scheduler is added by this App. Only claim operations supported by your actual tools.\n\n${INSIDER_INSTRUCTIONS}\n</INSIDER_CONTROLLER>`,
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n"),
                 },
                 ...creationPolicy(settings),
                 initial_message: { role: "user", content, run: true },

@@ -112,13 +112,28 @@ and `finish`. Switching an LLM profile changes its model, not its tools. Choosin
 an agent profile for new conversations does not retrofit an existing Cat. Inspect
 the saved conversation's actual configuration when diagnosing missing tools.
 
-The App's authenticated conversation browser does not automatically grant the
-Cat backend-query tools. Counting loaded cards is not counting the backend.
-As of September 20, 2026, the App does not install tools to count, list, read,
-create, or message other conversations. The recommended next capability is a
-small set of tools bound to the owning backend: read/count first, then explicit
-worker creation and messaging under the user's existing approval policy. A
-workspace terminal alone is not a documented backend API integration.
+The Cat should have the normal OpenHands tools and enabled skills, including
+`openhands-api`. With its terminal, that skill, and accurate runtime information
+for the owning backend, it can query Agent Server directly. Dedicated tools for
+counting or coordinating conversations are optional conveniences. They are not
+a prerequisite for API access through the terminal. The profile and runtime
+must actually supply these capabilities; a saved conversation created without
+tools or skills does not acquire them merely by connecting Voice.
+
+For a total, query the backend's conversation-count endpoint. For a list, follow
+pagination. Counting loaded cards is not counting the backend. A filesystem
+count is meaningful only when the persistence path is confirmed to belong to
+that local backend, and counts conversation records rather than message events.
+API calls must use the supplied backend and configured authentication source,
+without exposing credentials. Worker creation and messaging follow the user's
+existing authorization and approval policy.
+
+New Cats inherit advertised `runtime_services` from their owning backend's
+`/server_info`. Agent-side URLs and authentication environment-variable names
+are added to the launch context; credential values are never copied. The host
+must advertise its actual services and provide the referenced environment or
+key file to the agent. Missing metadata does not prevent launching a Cat, but
+the agent must establish the connection before claiming backend access.
 
 For now, both voice transports instruct the realtime model to delegate every
 new request, including greetings and recall, so conversation ownership stays
@@ -200,8 +215,14 @@ tools. Adding the standard tools preserved its ID, model, approvals, and all
 existing events. A generated spoken calculation then produced an actual terminal
 action and observation, a saved answer, and the matching spoken result. Voice
 also emitted a misleading waiting acknowledgment before that result; progress
-speech still needs refinement. This test establishes workspace-tool delegation,
-not backend inventory or worker-management capabilities.
+speech still needs refinement. A subsequent repair restored the eleven bundled
+default skills and accurate backend/authentication context to that same Cat,
+preserving its saved events. A real spoken backend-count request then invoked
+`openhands-api`, discovered the live API through the terminal, queried
+`/api/conversations/count`, saved the answer, and returned matching spoken audio.
+An independent API check agreed. This verifies the existing terminal-and-skills
+path for backend inspection; worker creation and messaging need their own live
+checks before claiming those flows are verified.
 Physical iPad microphone and speaker behavior remain device checks.
 
 Call status includes fixed `error_code` values: `request_not_sent` means the
