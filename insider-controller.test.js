@@ -5,8 +5,9 @@ import {
 } from "./src/insider-controller.js";
 
 describe("Insider conversation identity and display", () => {
-  it("accepts old top-level Insider tags and rejects delegated or different roles", () => {
-    expect(isController({ tags: { smolpaws: "insider" } })).toBe(true);
+  it("requires the explicit Insider controller identity on a top-level conversation", () => {
+    expect(isController({ tags: { smolpaws: "insider" } })).toBe(false);
+    expect(isController({ tags: { insiderrole: "controller" } })).toBe(false);
     expect(
       isController({
         tags: { smolpaws: "insider", insiderrole: "controller" },
@@ -15,7 +16,7 @@ describe("Insider conversation identity and display", () => {
     expect(
       isController({
         parent_conversation_id: "parent",
-        tags: { smolpaws: "insider" },
+        tags: { smolpaws: "insider", insiderrole: "controller" },
       }),
     ).toBe(false);
     expect(

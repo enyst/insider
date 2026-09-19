@@ -4,8 +4,7 @@ A Projects page and a durable typed companion for **Agent Canvas**. Insider Cat
 is a sibling of SmolPaws, with its own conversation and the capabilities supplied
 by its configured agent profile.
 
-This repository holds an independent copy of the App developed in
-`odie/apps/insider-cat`. It includes the prepared browser bundle, source, skill,
+This repository includes the prepared browser bundle, source, skill,
 translations, and tests. Building or installing it does not require Odie's source
 checkout.
 
@@ -45,8 +44,9 @@ dependencies or run a build.
   **New Cat conversation** creates a separate controller on the first send.
   The App remembers the last chosen controller for its backend and organization,
   then verifies its Insider tags when loading it again. `/new` prepares a fresh
-  Cat without sending that command to the previous conversation. Older top-level
-  Insider conversations can resume without changing their profile or guidance.
+  Cat without sending that command to the previous conversation. Controllers
+  must be top-level conversations with both `smolpaws: insider` and
+  `insiderrole: controller` tags.
 - Create the controller using the active **OpenHands agent profile** and its
   workspace, preserving the user's confirmation policy and security settings.
   The [Insider skill](skills/insider-cat/SKILL.md) is embedded in its launch
@@ -61,8 +61,9 @@ dependencies or run a build.
   that Cat's active voice call, even if compaction later fails. Click **Start
   voice** after it completes to load the current context. Opening the full Cat
   conversation and returning to its App page keeps the same conversation ID.
-  Older hosts without `onConversationContextChangeRequested` cannot notify the
-  App about regular-view compaction; end and restart voice manually there.
+  Automatic call cleanup for regular-view compaction requires the host's
+  `onConversationContextChangeRequested` capability. Without it, end voice
+  before compacting in the regular view and restart afterwards.
 
 Selecting a worker provides context to the Cat; it does not send that worker a
 message. Coordination depends on the tools supplied by the chosen profile. This
@@ -166,8 +167,8 @@ For the OpenAI API transport, the browser relays the voice model's
 `send_to_insider` requests into that Cat's saved conversation. It waits for the
 backend to confirm that the complete agent run,
 including stop hooks, has settled with a `finished` status, then reloads the
-saved answer. A proposed finish event alone is insufficient. An older broker
-that cannot verify the run's completion directs the user to inspect the
+saved answer. A proposed finish event alone is insufficient. If the broker
+cannot verify the run's completion, the App directs the user to inspect the
 conversation instead of speaking a proposed answer. It has no independent worker
 dispatcher; approval requests are handled in the full conversation. Delegated
 requests and controller replies are durable. The OpenAI API transport does not
@@ -175,8 +176,7 @@ separately save exact audio or the full voice transcript.
 Typed chat remains available when voice is disconnected or unconfigured.
 
 The [behavior and architecture notes](https://enyst.github.io/arch/insider-cat.html)
-cover the design direction and distinguish this App from the older Secretary
-skin and voice experiments.
+cover the App's behavior, architecture, and design direction.
 
 ## Development
 

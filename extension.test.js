@@ -248,38 +248,44 @@ describe("Insider Cat App", () => {
     ).toBe(false);
   });
 
-  it("resumes a legacy top-level Insider while excluding delegated children and other roles", async () => {
-    const legacy = { ...controller, tags: { smolpaws: "insider" } };
+  it("resumes an explicit Insider controller while excluding incomplete tags, children, and other roles", async () => {
     const app = mountApp({
       request: ({ path }) => {
         if (path.startsWith("/api/conversations/search"))
           return {
             items: [
-              legacy,
+              controller,
               {
-                ...legacy,
+                ...controller,
+                id: "missing-role",
+                tags: { smolpaws: "insider" },
+              },
+              {
+                ...controller,
                 id: "delegated-child",
                 parent_conversation_id: controller.id,
               },
               {
-                ...legacy,
+                ...controller,
                 id: "worker-role",
                 tags: { smolpaws: "insider", insiderrole: "worker" },
               },
             ],
             next_page_id: null,
           };
-        if (path === `/api/conversations/${legacy.id}`) return legacy;
+        if (path === `/api/conversations/${controller.id}`) return controller;
       },
     });
-    await waitFor(() => expect(find(app, "controller")?.value).toBe(legacy.id));
+    await waitFor(() =>
+      expect(find(app, "controller")?.value).toBe(controller.id),
+    );
     expect(find(app, "controller").options.length).toBe(2);
-    draft(app, "Continue our old conversation.");
+    draft(app, "Continue our conversation.");
     click(app, "send");
     await waitFor(() =>
       expect(app.request).toHaveBeenCalledWith(
         expect.objectContaining({
-          path: `/api/conversations/${legacy.id}/events`,
+          path: `/api/conversations/${controller.id}/events`,
           method: "POST",
         }),
       ),

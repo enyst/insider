@@ -450,7 +450,7 @@ describe("Insider voice lifecycle", () => {
   });
 
   it.each([{ available: true }, { available: true, run_active: false }])(
-    "does not certify an answer with an older broker contract %j",
+    "does not certify an answer without complete broker confirmation %j",
     async (availability) => {
       const app = setup({
         request: (call) =>
