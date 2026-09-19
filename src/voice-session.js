@@ -173,8 +173,22 @@ export function createVoiceSession({
           end();
           return;
         }
-        if (current.error || !CODEX_STATUSES.has(current.status))
-          throw new Error("voiceCodexUnavailable");
+        if (
+          current.error ||
+          current.error_code ||
+          !CODEX_STATUSES.has(current.status)
+        ) {
+          // Only fixed protocol codes choose copy; backend/provider text stays
+          // private, including when the server has no recognized error code.
+          const error =
+            current.error_code === "request_not_sent"
+              ? "voiceRequestNotSent"
+              : current.error_code === "relay_failed"
+                ? "voiceRelayFailed"
+                : "voiceConnectionFailed";
+          fail(error, version);
+          return;
+        }
         const transcripts = {};
         for (const item of current.transcripts || []) {
           if (
@@ -192,7 +206,7 @@ export function createVoiceSession({
         await wait();
       }
     } catch {
-      fail("voiceCodexUnavailable", version);
+      fail("voiceConnectionFailed", version);
     }
   }
   async function delegate(userRequest, id, version) {

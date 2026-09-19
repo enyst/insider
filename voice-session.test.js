@@ -1038,7 +1038,63 @@ describe("Codex server-owned voice relay", () => {
     expect(app.session.getSnapshot()).toMatchObject({
       status: "error",
       provider: "codex",
-      error: "voiceCodexUnavailable",
+      error: "voiceConnectionFailed",
     });
+  });
+
+  it.each([
+    ["request_not_sent", "voiceRequestNotSent"],
+    ["relay_failed", "voiceRelayFailed"],
+    ["connection_failed", "voiceConnectionFailed"],
+    [undefined, "voiceConnectionFailed"],
+    ["unrecognized_provider_detail", "voiceConnectionFailed"],
+    ["constructor", "voiceConnectionFailed"],
+  ])("reports only the fixed message for call error code %s", async (code, error) => {
+    const app = setupCodex({
+      request: (call) =>
+        call.method === "GET" && call.path.endsWith("/codex_call_a")
+          ? {
+              provider: "codex",
+              status: "error",
+              error_code: code,
+              error: "Private backend detail must not reach the page",
+            }
+          : undefined,
+    });
+    await app.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "error",
+      provider: "codex",
+      controllerId: controller.id,
+      error,
+    });
+    expect(JSON.stringify(app.session.getSnapshot())).not.toContain("Private backend");
+    expect(track.stop).toHaveBeenCalledOnce();
+    expect(peers[0].close).toHaveBeenCalledOnce();
+    expect(peers[0].channel.close).toHaveBeenCalledOnce();
+    expect(app.request).toHaveBeenCalledWith({
+      method: "DELETE",
+      path: "/api/conversations/controller-a/voice/realtime/codex_call_a",
+    });
+    const requests = app.request.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(app.request.mock.calls).toHaveLength(requests);
+  });
+
+  it("does not accept an error code from a different provider", async () => {
+    const app = setupCodex({
+      request: (call) =>
+        call.method === "GET" && call.path.endsWith("/codex_call_a")
+          ? {
+              provider: "openai",
+              status: "error",
+              error_code: "request_not_sent",
+            }
+          : undefined,
+    });
+    await app.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot().error).toBe("voiceConnectionFailed");
   });
 });

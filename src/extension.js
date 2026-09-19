@@ -1,5 +1,7 @@
 import { mountLocalizedApp } from "../i18n.jsx";
 import { createVoiceSession } from "./voice-session.js";
+import { fetchRuntimeServicesSuffix } from "./runtime-context.js";
+import { catPageMarkup, catViewStyles, mountCatVoice } from "./cat-view.js";
 import {
   CONTROLLER_TAGS,
   isController,
@@ -12,8 +14,6 @@ const PAGE_SIZE = 100;
 const CONTROLLER_STORAGE_PREFIX = "insider-cat:controller:";
 const NEW_COMMAND = "/new";
 const CONDENSE_COMMAND = "/condense";
-const OPENAI_API_KEY_NAME = "OPENAI_API_KEY";
-const SECRETS_ROUTE = "/settings/secrets";
 const NEW_CONTROLLER_PAGE_PATH = "/extensions/insider-cat/projects/new";
 const controllerPagePath = (id) =>
   `/extensions/insider-cat/projects/conversations/${encodeURIComponent(id)}`;
@@ -120,6 +120,7 @@ export function activate(host) {
     newRequested: savedSelection?.newRequested === true,
     busy: false,
     controllerInvalid: false,
+    controllerStatusUnknown: false,
     mutationNotice: null,
     requestedControllerId:
       typeof savedSelection?.controllerId === "string"
@@ -127,9 +128,58 @@ export function activate(host) {
         : null,
   };
   let syncCompanion = null;
+  let activePageRoot = null;
+  let awayTimer = null;
+  let awayGeneration = 0;
+  let disposed = false;
+
+  // Regular Canvas can start or finish work while Projects is unmounted.
+  // Refresh only the companion's status there; page polling owns it otherwise.
+  function watchAwayStatus() {
+    clearTimeout(awayTimer);
+    const generation = ++awayGeneration;
+    const id = state.controller?.id;
+    if (
+      disposed ||
+      activePageRoot ||
+      !syncCompanion ||
+      !id ||
+      state.controllerInvalid
+    )
+      return;
+    const current = () =>
+      !disposed &&
+      !activePageRoot &&
+      generation === awayGeneration &&
+      state.controller?.id === id;
+    const schedule = () => {
+      if (current() && !state.controllerInvalid)
+        awayTimer = setTimeout(
+          refresh,
+          state.controller?.execution_status === "running" ? 2500 : 10000,
+        );
+    };
+    const refresh = async () => {
+      try {
+        const info = await host.agentServer.request({ path: detailPath(id) });
+        if (!current()) return;
+        state.controllerStatusUnknown = false;
+        state.controllerInvalid = !isController(info);
+        if (!state.controllerInvalid) state.controller = info;
+      } catch {
+        if (!current()) return;
+        state.controllerStatusUnknown = true;
+      }
+      if (current()) syncCompanion?.();
+      schedule();
+    };
+    schedule();
+  }
   const voiceAudio = document.createElement("audio");
   voiceAudio.autoplay = true;
   voiceAudio.hidden = true;
+  // Route and language remounts never detach the playback element.
+  document.body.append(voiceAudio);
   const voice = createVoiceSession({
     host,
     canSubmit: (id) =>
@@ -168,122 +218,63 @@ export function activate(host) {
         voice.end();
     },
   );
+  const canStartVoice = () =>
+    Boolean(state.controller) &&
+    !state.busy &&
+    !state.uncertain &&
+    !state.controllerInvalid &&
+    !state.controllerStatusUnknown &&
+    ["idle", "error"].includes(voice.getSnapshot().status);
+  const startVoice = () => {
+    if (canStartVoice()) void voice.start(state.controller, voiceAudio);
+  };
   const unregisterCompanion = host.registerCompanion?.({
     id: "voice",
     mount: ({ container, navigate }) =>
       mountLocalizedApp(container, ({ container, t }) => {
         const root = document.createElement("section");
         root.className = "insider-voice";
-        root.innerHTML = `<style>.insider-voice{box-sizing:border-box;width:min(360px,calc(100vw - 32px));padding:14px 16px;border:1px solid #53677e;border-radius:16px;background:#182432;color:#edf5ff;box-shadow:0 8px 28px #0005;font:13px/1.5 system-ui,sans-serif}.insider-voice[hidden]{display:none}.insider-voice strong{font-size:14px}.insider-voice p{margin:6px 0}.insider-voice .voice-id{font:10px/1.4 ui-monospace,monospace;overflow-wrap:anywhere;opacity:.75}.insider-voice .voice-actions{display:flex;gap:7px;flex-wrap:wrap}.insider-voice button{font:inherit;color:inherit;background:#253c51;border:1px solid #58738c;border-radius:7px;padding:6px 9px;cursor:pointer}.insider-voice button:disabled{opacity:.5;cursor:default}.insider-voice button:focus-visible{outline:2px solid #96cfff;outline-offset:2px}.insider-voice [hidden]{display:none!important}</style><strong data-role="name"></strong><p data-role="controller-id" class="voice-id"></p><p data-role="status" role="status" aria-live="polite"></p><div class="voice-actions"><button data-action="start"></button><button data-action="mute"></button><button data-action="interrupt"></button><button data-action="end"></button><button data-action="open"></button></div>`;
-        const button = (name) => root.querySelector(`[data-action="${name}"]`);
-        const provider = document.createElement("p");
-        provider.dataset.role = "provider";
-        const transcripts = document.createElement("div");
-        transcripts.dataset.role = "transcripts";
-        transcripts.style.cssText =
-          "max-height:100px;overflow:auto;overflow-wrap:anywhere";
-        const transcriptNodes = Object.fromEntries(
-          ["user", "assistant"].map((role) => {
-            const line = document.createElement("p");
-            const label = document.createElement("strong");
-            label.textContent = `${t(role)}: `;
-            const text = document.createElement("span");
-            line.append(label, text);
-            transcripts.append(line);
-            return [role, { line, text }];
-          }),
-        );
-        root.querySelector(".voice-actions").before(provider, transcripts);
-        const setup = document.createElement("button");
-        setup.dataset.action = "setup";
-        setup.textContent = t("voiceSetup");
-        setup.onclick = () => navigate(SECRETS_ROUTE);
-        root.querySelector(".voice-actions").append(setup);
-        button("start").textContent = t("voiceStart");
-        button("interrupt").textContent = t("voiceInterrupt");
-        button("end").textContent = t("voiceEnd");
-        button("open").textContent = t("full");
-        button("start").onclick = () => {
-          if (state.controller && !state.busy && !state.controllerInvalid)
-            void voice.start(state.controller, voiceAudio);
-        };
-        button("mute").onclick = () =>
-          voice.setMuted(!voice.getSnapshot().muted);
-        button("interrupt").onclick = () => voice.interrupt();
-        button("end").onclick = () => voice.end();
-        button("open").onclick = () => {
-          const id = voice.getSnapshot().controllerId || state.controller?.id;
-          if (id) navigate(`/conversations/${encodeURIComponent(id)}`);
-        };
+        root.innerHTML = `<style>${catViewStyles}</style>`;
+        const view = mountCatVoice({
+          container: root,
+          t,
+          voice,
+          compact: true,
+          navigate,
+          getState: () => ({ ...state, voiceSupported: true }),
+          start: startVoice,
+          canStart: canStartVoice,
+        });
         const sync = () => {
           const current = voice.getSnapshot();
           const connected = !["idle", "error"].includes(current.status);
-          provider.textContent =
-            current.provider === "codex"
-              ? "Codex"
-              : current.provider === "openai"
-                ? "OpenAI API"
-                : "";
-          provider.hidden = !provider.textContent;
-          for (const [role, nodes] of Object.entries(transcriptNodes)) {
-            nodes.text.textContent = current.transcripts?.[role] || "";
-            nodes.line.hidden = !nodes.text.textContent;
-          }
-          transcripts.hidden = !Object.values(current.transcripts || {}).some(
-            Boolean,
-          );
           root.hidden =
-            !state.controller && !connected && current.status !== "error";
-          root.querySelector('[data-role="name"]').textContent =
-            state.controller?.title || t("cat");
-          root.querySelector('[data-role="controller-id"]').textContent =
-            current.controllerId || state.controller?.id || "";
-          root.querySelector('[data-role="status"]').textContent = current.error
-            ? t(current.error, { name: OPENAI_API_KEY_NAME })
-            : t(
-                current.muted
-                  ? "voiceMuted"
-                  : {
-                      idle: "voiceReady",
-                      connecting: "voiceConnecting",
-                      listening: "voiceListening",
-                      thinking: "voiceThinking",
-                      speaking: "voiceSpeaking",
-                    }[current.status],
-              );
-          button("start").hidden = connected;
-          setup.hidden = current.error !== "voiceKeyMissing";
-          button("start").disabled =
-            !state.controller ||
-            state.busy ||
-            state.uncertain ||
-            state.controllerInvalid;
-          button("mute").hidden = !connected;
-          button("mute").disabled = current.status === "connecting";
-          button("mute").textContent = t(
-            current.muted ? "voiceUnmute" : "voiceMute",
-          );
-          button("interrupt").hidden =
-            !connected || current.provider === "codex";
-          button("end").hidden = !connected;
+            Boolean(activePageRoot) ||
+            (!state.controller && !connected && current.status !== "error");
+          view.sync();
         };
-        root.append(voiceAudio);
         container.append(root);
         syncCompanion = sync;
         sync();
+        watchAwayStatus();
         return () => {
-          if (syncCompanion === sync) syncCompanion = null;
+          if (syncCompanion === sync) {
+            syncCompanion = null;
+            watchAwayStatus();
+          }
           root.remove();
         };
       }),
   });
   const rememberController = () => {
+    state.controllerStatusUnknown = false;
     if (
       voice.getSnapshot().controllerId &&
       voice.getSnapshot().controllerId !== state.controller?.id
     )
       voice.end();
     syncCompanion?.();
+    watchAwayStatus();
     try {
       localStorage.setItem(
         storageKey,
@@ -342,34 +333,36 @@ export function activate(host) {
         let noticeKind = null;
         const root = document.createElement("section");
         root.className = "insider-app";
-        root.innerHTML = `<style>
-      .insider-app{--cat-bg:var(--oh-surface,#171b22);--cat-line:var(--oh-border,#39414d);--cat-text:var(--oh-foreground,#edf1f6);color:var(--cat-text);max-width:1520px;margin:auto;padding:clamp(18px,3vw,40px);font:15px/1.55 system-ui,sans-serif}
-      .insider-app *{box-sizing:border-box}.insider-app h1,.insider-app h2,.insider-app p{margin:0}.insider-app h1{font-size:32px;letter-spacing:-.04em}.insider-app h2{font-size:20px}.insider-app h3{font-size:13px;margin:14px 0 6px}.insider-app .cat-head{display:flex;align-items:start;justify-content:space-between;gap:16px;margin-bottom:28px}.insider-app .cat-muted{overflow-wrap:anywhere;opacity:.76;font-size:13px}.insider-app .cat-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);gap:26px}.insider-app .cat-stack{min-width:0;display:grid;gap:14px;align-content:start}.insider-app .cat-panel{min-width:0;padding:22px;border:1px solid var(--cat-line);border-radius:16px;background:var(--cat-bg)}
-      .insider-app button,.insider-app select,.insider-app input,.insider-app textarea{font:inherit;color:inherit;border:1px solid var(--cat-line);border-radius:8px;background:transparent;padding:9px 12px}.insider-app button{cursor:pointer}.insider-app button:hover{border-color:#76bdf6}.insider-app button:disabled{cursor:default;opacity:.45}.insider-app .cat-primary{background:#96cfff;color:#122331;border-color:#96cfff;font-weight:650}.insider-app button:focus-visible,.insider-app input:focus-visible,.insider-app select:focus-visible,.insider-app textarea:focus-visible{outline:2px solid #96cfff;outline-offset:3px}.insider-app [hidden]{display:none!important}
-      .insider-app .cat-controls{display:flex;gap:10px;flex-wrap:wrap}.insider-app .cat-controls input{flex:1;min-width:160px}.insider-app select{width:100%;min-width:0;max-width:100%}.insider-app option{background:var(--cat-bg);color:var(--cat-text)}.insider-app label{min-width:0;display:grid;gap:6px;font-size:13px}.insider-app textarea{width:100%;min-height:128px;resize:vertical}.insider-app .cat-cards{display:grid;gap:10px}.insider-app .cat-card{border:1px solid var(--cat-line);padding:14px;border-radius:12px;display:grid;gap:10px}.insider-app .cat-card.is-selected{border-color:#96cfff;background:#96cfff0c}.insider-app .cat-card-title{font-weight:600;overflow-wrap:anywhere}.insider-app .cat-card-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;opacity:.85}.insider-app .cat-badge{border:1px solid var(--cat-line);border-radius:5px;padding:1px 6px}.insider-app .cat-card[data-status=waiting_for_confirmation] .cat-badge{color:#ffdb85}.insider-app .cat-card[data-status=error] .cat-badge,.insider-app .cat-card[data-status=stuck] .cat-badge{color:#ffaba7}.insider-app .cat-card button{font-size:12px;padding:5px 9px}.insider-app .cat-target{border-left:3px solid #96cfff;padding:10px 12px;background:#96cfff0c;overflow-wrap:anywhere}.insider-app .cat-target code{font-size:12px}.insider-app .cat-notice{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.insider-app .cat-history{max-height:420px;overflow:auto;display:grid;gap:14px}.insider-app .cat-message{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;border-top:1px solid var(--cat-line);padding-top:10px}.insider-app .cat-message strong{display:block;font-size:12px;margin-bottom:5px;color:var(--cat-text)}.insider-app .cat-voice{font-size:12px;opacity:.7;border-top:1px solid var(--cat-line);padding-top:12px}.insider-app .cat-icon{font-size:26px;line-height:1.2;color:#aad5fa}
-      @media(max-width:950px){.insider-app .cat-grid{grid-template-columns:1fr}.insider-app .cat-panel{padding:16px}}
-    </style>
-    <header class="cat-head"><div><h1 data-copy="title"></h1><p data-copy="subtitle" class="cat-muted"></p><p data-role="backend" class="cat-muted"></p></div><button data-action="refresh" data-copy="refresh"></button></header>
-    <div class="cat-grid"><div class="cat-stack"><div class="cat-controls"><input data-action="search"><select data-action="project"></select></div><p data-role="coverage" class="cat-muted" role="status"></p><div data-role="cards" class="cat-cards"></div><button data-action="load-more" data-copy="loadMore" hidden></button></div>
-    <aside class="cat-panel cat-stack"><div><span class="cat-icon" aria-hidden="true">ฅ^•ﻌ•^ฅ</span><h2 data-copy="cat"></h2><p data-copy="catIntro" class="cat-muted"></p></div>
-    <label><span data-copy="controller"></span><select data-action="controller"></select></label><div class="cat-controls"><button data-action="new-cat" data-copy="newCat"></button><button data-action="open-controller" data-copy="full" hidden></button></div>
-    <p data-role="cat-status" class="cat-muted" role="status"></p><label data-role="workspace-field"><span data-copy="workspace"></span><select data-action="workspace"></select><span data-copy="workspaceHelp" class="cat-muted"></span></label>
-    <div data-role="target" class="cat-target" hidden></div><label><span data-copy="draft"></span><textarea data-action="draft"></textarea></label><div class="cat-controls"><button data-action="send" data-copy="send" class="cat-primary"></button><button data-action="checked" data-copy="checked" hidden></button></div>
-    <p data-role="notice" class="cat-notice" role="status" aria-live="polite"></p><h3 data-copy="recent"></h3><div data-role="history" class="cat-history"></div><p data-copy="partialHistory" class="cat-muted"></p><p data-role="voice-help" class="cat-voice"></p></aside></div>`;
+        root.innerHTML = catPageMarkup;
+        activePageRoot = root;
+        watchAwayStatus();
         root.querySelectorAll("[data-copy]").forEach((node) => {
           node.textContent = t(node.dataset.copy);
         });
         const action = (name) => root.querySelector(`[data-action="${name}"]`);
         const role = (name) => root.querySelector(`[data-role="${name}"]`);
-        role("backend").textContent = t("backend", { id: host.backend.id });
         action("search").placeholder = t("search");
         action("search").ariaLabel = t("search");
         action("project").ariaLabel = t("project");
         action("draft").placeholder = t("placeholder");
         action("draft").value = state.draft;
-        role("voice-help").textContent = t(
-          host.registerCompanion ? "voiceHelp" : "voiceUnavailable",
-        );
+        const pageVoice = mountCatVoice({
+          container: role("voice"),
+          t,
+          voice,
+          navigate,
+          conversationControls: root.querySelector(".cat-picker"),
+          getState: () => ({
+            ...state,
+            voiceSupported: Boolean(host.registerCompanion),
+          }),
+          start: startVoice,
+          canStart: () =>
+            Boolean(host.registerCompanion) &&
+            discoveryReady &&
+            canStartVoice(),
+        });
+        role("conversation").title = t("partialHistory");
         container.append(root);
         const request = (path, method = "GET", body) =>
           host.agentServer.request({
@@ -397,12 +390,27 @@ export function activate(host) {
           node.textContent = text;
           return node;
         };
+        const workspaceName = (path) =>
+          path
+            .replace(/[\\/]+$/, "")
+            .split(/[\\/]/)
+            .pop() || path;
+        const workspaceOption = (path, paths) => {
+          const name = workspaceName(path);
+          const duplicate = paths.some(
+            (other) => other !== path && workspaceName(other) === name,
+          );
+          const node = option(path, duplicate ? path : name);
+          node.title = path;
+          return node;
+        };
         const open = (id) =>
           navigate(`/conversations/${encodeURIComponent(id)}`);
 
         function renderControls() {
           if (!alive) return;
           syncCompanion?.();
+          pageVoice.sync();
           action("send").disabled =
             state.busy ||
             !discoveryReady ||
@@ -418,24 +426,29 @@ export function activate(host) {
           action("controller").disabled = state.busy || state.uncertain;
           action("open-controller").hidden = !state.controller;
           role("workspace-field").hidden = Boolean(state.controller);
-          role("cat-status").textContent = !discoveryReady
-            ? t("searching")
-            : state.controller
-              ? `${state.controller.id} · ${t(EXECUTION_STATUSES.has(state.controller.execution_status) ? state.controller.execution_status : "unknown")}`
-              : t(
-                  controllers.length > 1 && !state.newRequested
-                    ? "choose"
-                    : "newReady",
-                );
+          role("conversation").hidden = !state.controller;
+          role("cat-status").hidden = discoveryReady;
+          role("cat-status").textContent = discoveryReady ? "" : t("searching");
         }
         function renderControllerChoices() {
           action("controller").replaceChildren(
             option("", t("chooseController")),
-            ...controllers.map((c) =>
-              option(c.id, `${c.title || t("cat")} · ${c.id}`),
-            ),
+            ...controllers.map((c) => {
+              const title = c.title || t("cat");
+              const duplicate = controllers.some(
+                (other) =>
+                  other.id !== c.id && (other.title || t("cat")) === title,
+              );
+              const node = option(
+                c.id,
+                duplicate ? `${title} · ${c.id.slice(0, 8)}` : title,
+              );
+              node.title = c.id;
+              return node;
+            }),
           );
           action("controller").value = state.controller?.id || "";
+          action("controller").title = state.controller?.id || "";
           renderControls();
         }
         function renderWorkspaces() {
@@ -450,7 +463,7 @@ export function activate(host) {
           ];
           action("workspace").replaceChildren(
             option("", t("chooseWorkspace")),
-            ...paths.map((path) => option(path, path)),
+            ...paths.map((path) => workspaceOption(path, paths)),
           );
           action("workspace").value = state.workspace;
         }
@@ -459,12 +472,9 @@ export function activate(host) {
           node.replaceChildren();
           node.hidden = !state.selected;
           if (!state.selected) return;
-          const label = document.createElement("strong");
-          label.textContent = t("selected");
-          const title = document.createElement("div");
-          title.textContent = state.selected.title || state.selected.id;
-          const id = document.createElement("code");
-          id.textContent = state.selected.id;
+          const title = document.createElement("span");
+          title.textContent = `${t("selected")}: ${state.selected.title || state.selected.id}`;
+          title.title = state.selected.id;
           const clear = document.createElement("button");
           clear.textContent = t("clear");
           clear.addEventListener("click", () => {
@@ -472,7 +482,7 @@ export function activate(host) {
             renderTarget();
             renderBoard();
           });
-          node.append(label, title, id, document.createElement("br"), clear);
+          node.append(title, clear);
         }
         function renderBoard() {
           if (!alive) return;
@@ -503,7 +513,9 @@ export function activate(host) {
                 : "unknown",
             );
             const project = document.createElement("span");
-            project.textContent = workspaceOf(c) || t("noWorkspace");
+            project.textContent =
+              workspaceName(workspaceOf(c)) || t("noWorkspace");
+            project.title = workspaceOf(c);
             meta.append(badge, project);
             const buttons = document.createElement("div");
             buttons.className = "cat-controls";
@@ -517,6 +529,7 @@ export function activate(host) {
               renderTarget();
               renderWorkspaces();
               renderBoard();
+              role("target").scrollIntoView?.({ block: "nearest" });
             });
             const link = document.createElement("button");
             link.dataset.action = "open-worker";
@@ -540,7 +553,7 @@ export function activate(host) {
           action("project").replaceChildren(
             option("", t("all")),
             ...[...new Set(board.map(workspaceOf).filter(Boolean))].map(
-              (path) => option(path, path),
+              (path, _, paths) => workspaceOption(path, paths),
             ),
           );
           action("project").value = selected;
@@ -604,7 +617,10 @@ export function activate(host) {
             board = unique(more ? [...board, ...page.items] : page.items);
             cursor = page.next_page_id || null;
             role("coverage").textContent =
-              `${t("loaded", { count: board.length })} · ${cursor ? "" : `${t("complete")} · `}${t("refreshed", { time: new Date().toLocaleTimeString() })}`;
+              `${t("loaded", { count: board.filter((c) => !isController(c)).length })}${cursor ? "" : ` · ${t("complete")}`}`;
+            role("coverage").title = t("refreshed", {
+              time: new Date().toLocaleTimeString(),
+            });
             updateBoardFilters();
             if (!more) {
               discoveryReady = false;
@@ -654,14 +670,19 @@ export function activate(host) {
               throw new Error(t("invalidController"));
             }
             state.controllerInvalid = false;
+            state.controllerStatusUnknown = false;
             state.controller = info;
             const history = role("history");
+            const previousScroll = history.scrollTop;
+            const followLatest =
+              history.scrollHeight - previousScroll - history.clientHeight < 48;
             history.replaceChildren();
             for (const event of [...(events.items || [])].reverse()) {
               const message = messageText(event);
               if (!message) continue;
               const row = document.createElement("div");
               row.className = "cat-message";
+              row.dataset.speaker = message.role;
               const label = document.createElement("strong");
               label.textContent = t(
                 message.role === "user" ? "user" : "assistant",
@@ -671,15 +692,21 @@ export function activate(host) {
             }
             if (!history.childElementCount)
               history.textContent = t("noMessages");
+            history.scrollTop = followLatest
+              ? history.scrollHeight
+              : previousScroll;
             if (noticeKind === "controller-read-error")
               notice(savedMutationNotice());
             renderControls();
           } catch (error) {
-            if (alive && generation === readGeneration)
+            if (alive && generation === readGeneration) {
+              state.controllerStatusUnknown = true;
+              renderControls();
               notice(
                 t("catError", { message: errorText(error) }),
                 "controller-read-error",
               );
+            }
           } finally {
             if (alive && generation === readGeneration)
               timer = setTimeout(
@@ -746,11 +773,13 @@ export function activate(host) {
               },
             ];
             if (!state.controller) {
-              const [profiles, settings, schema] = await Promise.all([
-                request("/api/agent-profiles"),
-                request("/api/settings"),
-                request("/openapi.json"),
-              ]);
+              const [profiles, settings, schema, runtimeSuffix] =
+                await Promise.all([
+                  request("/api/agent-profiles"),
+                  request("/api/settings"),
+                  request("/openapi.json"),
+                  fetchRuntimeServicesSuffix(request),
+                ]);
               if (!alive) return;
               if (!supportsControllerLaunch(schema))
                 throw new Error(t("incompatible"));
@@ -774,7 +803,12 @@ export function activate(host) {
                 tags: CONTROLLER_TAGS,
                 autotitle: false,
                 agent_launch_additions: {
-                  system_message_suffix_append: `<INSIDER_CONTROLLER>\nThe runtime identifies this conversation as the active Insider Cat controller. Backend: ${host.backend.id}. Controller ID: ${id}.\nThe Apps page supplies selected-worker context as data with each request. Canvas may relay voice requests into this same durable conversation. This conversation has only its configured profile tools; the voice transport is not an additional agent tool. No shared SmolPaws memory or scheduler is added by this App. Only claim operations supported by your actual tools.\n\n${INSIDER_INSTRUCTIONS}\n</INSIDER_CONTROLLER>`,
+                  system_message_suffix_append: [
+                    runtimeSuffix,
+                    `<INSIDER_CONTROLLER>\nThe runtime identifies this conversation as the active Insider Cat controller. Backend: ${host.backend.id}. Controller ID: ${id}.\nThe Apps page supplies selected-worker context as data with each request. Canvas may relay voice requests into this same durable conversation. This conversation has only its configured profile tools; the voice transport is not an additional agent tool. No shared SmolPaws memory or scheduler is added by this App. Only claim operations supported by your actual tools.\n\n${INSIDER_INSTRUCTIONS}\n</INSIDER_CONTROLLER>`,
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n"),
                 },
                 ...creationPolicy(settings),
                 initial_message: { role: "user", content, run: true },
@@ -980,6 +1014,9 @@ export function activate(host) {
           root.remove();
           if (disposeCurrent === dispose) disposeCurrent = null;
           if (syncCurrent === synchronize) syncCurrent = null;
+          if (activePageRoot === root) activePageRoot = null;
+          syncCompanion?.();
+          watchAwayStatus();
         };
         disposeCurrent = dispose;
         return dispose;
@@ -988,8 +1025,11 @@ export function activate(host) {
     { icon: "cat" },
   );
   return () => {
+    disposed = true;
+    watchAwayStatus();
     unsubscribeContextChanges?.();
     voice.end();
+    voiceAudio.remove();
     unregisterCompanion?.();
     disposeCurrent?.();
     unregister();
