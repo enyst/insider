@@ -6,6 +6,7 @@ const controller = {
   tags: { smolpaws: "insider", insiderrole: "controller" },
   execution_status: "idle",
 };
+const openaiOwner = { provider: "openai", delegation: "client" };
 let sessions;
 let peers;
 let microphone;
@@ -59,12 +60,14 @@ function setup(overrides = {}) {
     if (overridden !== undefined) return overridden;
     if (call.path.endsWith("/voice"))
       return {
+        ...openaiOwner,
         available: true,
         run_active: false,
         execution_status: executionStatus,
       };
     if (call.path.endsWith("/voice/realtime"))
       return {
+        ...openaiOwner,
         sdp: "test-answer",
         call_id: "rtc_call_a",
         model: "gpt-realtime-2.1",
@@ -130,7 +133,7 @@ describe("Insider voice lifecycle", () => {
     const app = setup({
       request: (call) =>
         call.path.endsWith("/voice/realtime")
-          ? { sdp: "test-answer", call_id: null }
+          ? { ...openaiOwner, sdp: "test-answer", call_id: null }
           : undefined,
     });
     await app.start();
@@ -231,6 +234,127 @@ describe("Insider voice lifecycle", () => {
     });
   });
 
+  it("keeps the saved-request lock through rejected tools, speech, and interruption", async () => {
+    const app = setup();
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot().requestPending).toBe(true);
+
+    app.emit({ ...toolEvent, call_id: "second-tool" });
+    app.emit({ ...toolEvent, call_id: "invalid-tool", arguments: "{}" });
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "thinking",
+      requestPending: true,
+    });
+    expect(
+      app.request.mock.calls.filter(
+        ([call]) => call.path.endsWith("/events") && call.method === "POST",
+      ),
+    ).toHaveLength(1);
+    const rejected = app
+      .sent()
+      .find((event) => event.item?.call_id === "second-tool");
+    expect(JSON.parse(rejected.item.output)).toMatchObject({
+      status: "still_working",
+      sent: false,
+    });
+
+    app.emit({ type: "output_audio_buffer.started" });
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "speaking",
+      requestPending: true,
+    });
+    app.session.interrupt();
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "thinking",
+      requestPending: true,
+    });
+    for (const type of [
+      "output_audio_buffer.stopped",
+      "output_audio_buffer.cleared",
+      "input_audio_buffer.speech_started",
+    ]) {
+      app.emit({ type });
+      expect(app.session.getSnapshot().requestPending).toBe(true);
+    }
+
+    app.setEvents([
+      {
+        id: "settled-answer",
+        action: { kind: "FinishAction", message: "The saved request finished." },
+      },
+    ]);
+    app.setStatus("finished");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "listening",
+      requestPending: false,
+    });
+    const answered = app
+      .sent()
+      .find((event) => event.item?.call_id === toolEvent.call_id);
+    expect(JSON.parse(answered.item.output).answer).toBe(
+      "The saved request finished.",
+    );
+  });
+
+  it("does not let an ended call release a fresh call's saved-request lock", async () => {
+    let release;
+    let preflightCount = 0;
+    const app = setup({
+      request: (call) =>
+        call.path.endsWith("/controller-a") && ++preflightCount === 1
+          ? new Promise((resolve) => {
+              release = resolve;
+            })
+          : undefined,
+    });
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot().requestPending).toBe(true);
+    app.session.end();
+    expect(app.session.getSnapshot().requestPending).toBe(false);
+
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    release(controller);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "thinking",
+      requestPending: true,
+    });
+    expect(
+      app.request.mock.calls.filter(
+        ([call]) => call.path.endsWith("/events") && call.method === "POST",
+      ),
+    ).toHaveLength(1);
+    app.session.end();
+    expect(app.session.getSnapshot().requestPending).toBe(false);
+  });
+
+  it.each([{}, { provider: "openai" }, { delegation: "client" }])(
+    "rejects an OpenAI answer without explicit dispatch ownership: %j",
+    async (owner) => {
+      const app = setup({
+        request: (call) =>
+          call.path.endsWith("/voice/realtime")
+            ? { sdp: "ambiguous-answer", call_id: "ambiguous-call", ...owner }
+            : undefined,
+      });
+      await app.start();
+      expect(track.stop).toHaveBeenCalledOnce();
+      expect(peers[0].setRemoteDescription).not.toHaveBeenCalled();
+      expect(app.request).toHaveBeenCalledWith({
+        path: "/api/conversations/controller-a/voice/realtime/ambiguous-call",
+        method: "DELETE",
+      });
+      expect(app.session.getSnapshot().status).toBe("error");
+    },
+  );
+
   it("releases the microphone on a data-channel failure and keeps the affected Cat visible", async () => {
     const app = setup();
     await app.start();
@@ -251,7 +375,11 @@ describe("Insider voice lifecycle", () => {
     const app = setup({
       request: (call) =>
         call.path.endsWith("/voice")
-          ? { available: false, reason: "missing_openai_api_key" }
+          ? {
+              ...openaiOwner,
+              available: false,
+              reason: "missing_openai_api_key",
+            }
           : undefined,
     });
     await app.start();
@@ -414,6 +542,7 @@ describe("Insider voice lifecycle", () => {
             },
           ]);
         return {
+          ...openaiOwner,
           available: true,
           run_active: runActive,
           execution_status: "finished",
@@ -454,7 +583,9 @@ describe("Insider voice lifecycle", () => {
     async (availability) => {
       const app = setup({
         request: (call) =>
-          call.path.endsWith("/voice") ? availability : undefined,
+          call.path.endsWith("/voice")
+            ? { ...openaiOwner, ...availability }
+            : undefined,
       });
       await app.start();
       app.emit(toolEvent);
@@ -482,6 +613,7 @@ describe("Insider voice lifecycle", () => {
       request: (call) =>
         call.path.endsWith("/voice")
           ? {
+              ...openaiOwner,
               available: true,
               run_active: false,
               execution_status: "waiting_for_confirmation",
@@ -790,6 +922,9 @@ describe("Codex server-owned voice relay", () => {
   });
 
   it.each([
+    {},
+    { provider: "openai" },
+    { delegation: "client" },
     { provider: "codex" },
     { provider: "codex", delegation: "client" },
     { provider: "unknown", delegation: "server" },

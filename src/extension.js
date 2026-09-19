@@ -711,7 +711,8 @@ export function activate(host) {
             await condenseController();
             return;
           }
-          if (voice.getSnapshot().status === "thinking") {
+          const voiceState = voice.getSnapshot();
+          if (voiceState.requestPending || voiceState.status === "thinking") {
             notice(t("voiceThinking"));
             return;
           }

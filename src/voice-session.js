@@ -8,9 +8,8 @@ const ANSWER_TIMEOUT_MS = 180000;
 const CONNECTION_TIMEOUT_MS = 30000;
 const CODEX_STATUSES = new Set(["listening", "thinking", "speaking"]);
 const providerOf = (value) => {
-  const provider = value?.provider ?? "openai";
-  const delegation =
-    value?.delegation ?? (provider === "openai" ? "client" : null);
+  const provider = value?.provider;
+  const delegation = value?.delegation;
   if (provider === "openai" && delegation === "client") return provider;
   if (provider === "codex" && delegation === "server") return provider;
   return null;
@@ -63,6 +62,7 @@ export function createVoiceSession({
     muted: false,
     error: null,
     provider: null,
+    requestPending: false,
     transcripts: {},
   };
   const publish = (change) => {
@@ -134,6 +134,7 @@ export function createVoiceSession({
       muted: false,
       error: null,
       provider: null,
+      requestPending: false,
       transcripts: {},
     });
   }
@@ -151,7 +152,8 @@ export function createVoiceSession({
     send({ type: "response.cancel" });
     send({ type: "output_audio_buffer.clear" });
     audio?.pause();
-    if (snapshot.status === "speaking") publish({ status: "listening" });
+    if (snapshot.status === "speaking")
+      publish({ status: pendingTool ? "thinking" : "listening" });
   }
   function setMuted(muted) {
     stream?.getAudioTracks().forEach((track) => {
@@ -365,7 +367,9 @@ export function createVoiceSession({
       };
     } else {
       pendingTool = true;
-      publish({ status: "thinking" });
+      // Speech status can change while this saved request is still running.
+      // Expose its lifetime separately so typed input cannot race its result.
+      publish({ status: "thinking", requestPending: true });
       try {
         output = await delegate(args.request.trim(), id, version);
       } catch {
@@ -391,7 +395,10 @@ export function createVoiceSession({
     if (epoch === speechEpoch) {
       send({ type: "response.create", response: { tool_choice: "none" } });
     }
-    publish({ status: "listening" });
+    publish({
+      status: pendingTool ? "thinking" : "listening",
+      requestPending: pendingTool,
+    });
   }
   async function start(controller, audioElement) {
     end();
@@ -411,7 +418,7 @@ export function createVoiceSession({
       const availability = await request(`${controllerPath(id)}/voice`);
       if (!active(version)) return;
       const provider = providerOf(availability);
-      publish({ provider: availability.provider || "openai" });
+      publish({ provider });
       if (!provider) {
         fail("voiceConnectionFailed", version);
         return;
