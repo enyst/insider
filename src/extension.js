@@ -168,6 +168,15 @@ export function activate(host) {
         voice.end();
     },
   );
+  const canStartVoice = () =>
+    Boolean(state.controller) &&
+    !state.busy &&
+    !state.uncertain &&
+    !state.controllerInvalid &&
+    ["idle", "error"].includes(voice.getSnapshot().status);
+  const startVoice = () => {
+    if (canStartVoice()) void voice.start(state.controller, voiceAudio);
+  };
   const unregisterCompanion = host.registerCompanion?.({
     id: "voice",
     mount: ({ container, navigate }) =>
@@ -203,10 +212,7 @@ export function activate(host) {
         button("interrupt").textContent = t("voiceInterrupt");
         button("end").textContent = t("voiceEnd");
         button("open").textContent = t("full");
-        button("start").onclick = () => {
-          if (state.controller && !state.busy && !state.controllerInvalid)
-            void voice.start(state.controller, voiceAudio);
-        };
+        button("start").onclick = startVoice;
         button("mute").onclick = () =>
           voice.setMuted(!voice.getSnapshot().muted);
         button("interrupt").onclick = () => voice.interrupt();
@@ -253,11 +259,7 @@ export function activate(host) {
               );
           button("start").hidden = connected;
           setup.hidden = current.error !== "voiceKeyMissing";
-          button("start").disabled =
-            !state.controller ||
-            state.busy ||
-            state.uncertain ||
-            state.controllerInvalid;
+          button("start").disabled = !canStartVoice();
           button("mute").hidden = !connected;
           button("mute").disabled = current.status === "connecting";
           button("mute").textContent = t(
@@ -352,10 +354,10 @@ export function activate(host) {
     <header class="cat-head"><div><h1 data-copy="title"></h1><p data-copy="subtitle" class="cat-muted"></p><p data-role="backend" class="cat-muted"></p></div><button data-action="refresh" data-copy="refresh"></button></header>
     <div class="cat-grid"><div class="cat-stack"><div class="cat-controls"><input data-action="search"><select data-action="project"></select></div><p data-role="coverage" class="cat-muted" role="status"></p><div data-role="cards" class="cat-cards"></div><button data-action="load-more" data-copy="loadMore" hidden></button></div>
     <aside class="cat-panel cat-stack"><div><span class="cat-icon" aria-hidden="true">ฅ^•ﻌ•^ฅ</span><h2 data-copy="cat"></h2><p data-copy="catIntro" class="cat-muted"></p></div>
-    <label><span data-copy="controller"></span><select data-action="controller"></select></label><div class="cat-controls"><button data-action="new-cat" data-copy="newCat"></button><button data-action="open-controller" data-copy="full" hidden></button></div>
+    <label><span data-copy="controller"></span><select data-action="controller"></select></label><div class="cat-controls"><button data-action="new-cat" data-copy="newCat"></button><button data-action="open-controller" data-copy="full" hidden></button><button data-action="voice-start" data-copy="voiceStart" disabled></button></div><p data-role="voice-help" class="cat-voice"></p>
     <p data-role="cat-status" class="cat-muted" role="status"></p><label data-role="workspace-field"><span data-copy="workspace"></span><select data-action="workspace"></select><span data-copy="workspaceHelp" class="cat-muted"></span></label>
     <div data-role="target" class="cat-target" hidden></div><label><span data-copy="draft"></span><textarea data-action="draft"></textarea></label><div class="cat-controls"><button data-action="send" data-copy="send" class="cat-primary"></button><button data-action="checked" data-copy="checked" hidden></button></div>
-    <p data-role="notice" class="cat-notice" role="status" aria-live="polite"></p><h3 data-copy="recent"></h3><div data-role="history" class="cat-history"></div><p data-copy="partialHistory" class="cat-muted"></p><p data-role="voice-help" class="cat-voice"></p></aside></div>`;
+    <p data-role="notice" class="cat-notice" role="status" aria-live="polite"></p><h3 data-copy="recent"></h3><div data-role="history" class="cat-history"></div><p data-copy="partialHistory" class="cat-muted"></p></aside></div>`;
         root.querySelectorAll("[data-copy]").forEach((node) => {
           node.textContent = t(node.dataset.copy);
         });
@@ -367,9 +369,7 @@ export function activate(host) {
         action("project").ariaLabel = t("project");
         action("draft").placeholder = t("placeholder");
         action("draft").value = state.draft;
-        role("voice-help").textContent = t(
-          host.registerCompanion ? "voiceHelp" : "voiceUnavailable",
-        );
+        action("voice-start").addEventListener("click", startVoice);
         container.append(root);
         const request = (path, method = "GET", body) =>
           host.agentServer.request({
@@ -403,6 +403,15 @@ export function activate(host) {
         function renderControls() {
           if (!alive) return;
           syncCompanion?.();
+          action("voice-start").disabled =
+            !host.registerCompanion || !discoveryReady || !canStartVoice();
+          role("voice-help").textContent = t(
+            !host.registerCompanion
+              ? "voiceUnavailable"
+              : state.controller
+                ? "voiceHelp"
+                : "voiceChoose",
+          );
           action("send").disabled =
             state.busy ||
             !discoveryReady ||

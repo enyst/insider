@@ -1477,5 +1477,22 @@
     "uk": "Голос Codex недоступний на цьому сервері агентів. Ви можете продовжити спілкування тут.",
     "zh-CN": "此代理服务器上的 Codex 语音不可用。你可以继续在这里聊天。",
     "zh-TW": "此代理伺服器上的 Codex 語音無法使用。你可以繼續在這裡聊天。"
+  },
+  "INSIDER_CAT$VOICE_CHOOSE": {
+    "en": "To use voice, choose a saved Cat or send your first message to create one.",
+    "ar": "لاستخدام الصوت، اختر محادثة Cat محفوظة أو أرسل رسالتك الأولى لإنشاء واحدة.",
+    "ca": "Per fer servir la veu, tria una conversa de Cat desada o envia el primer missatge per crear-ne una.",
+    "de": "Wähle für Voice eine gespeicherte Cat-Unterhaltung oder sende deine erste Nachricht, um eine zu erstellen.",
+    "es": "Para usar la voz, elige una conversación de Cat guardada o envía tu primer mensaje para crear una.",
+    "fr": "Pour utiliser la voix, choisissez une conversation Cat enregistrée ou envoyez votre premier message pour en créer une.",
+    "it": "Per usare la voce, scegli una conversazione Cat salvata o invia il primo messaggio per crearne una.",
+    "ja": "音声を使うには、保存済みの Cat の会話を選ぶか、最初のメッセージを送って会話を作成してください。",
+    "ko-KR": "음성을 사용하려면 저장된 Cat 대화를 선택하거나 첫 메시지를 보내 새 대화를 만드세요.",
+    "no": "For å bruke tale, velg en lagret Cat-samtale eller send den første meldingen for å opprette en.",
+    "pt": "Para usar a voz, escolha uma conversa Cat salva ou envie sua primeira mensagem para criar uma.",
+    "tr": "Sesi kullanmak için kayıtlı bir Cat sohbeti seçin veya ilk mesajınızı göndererek bir sohbet oluşturun.",
+    "uk": "Щоб скористатися голосом, виберіть збережену розмову Cat або надішліть перше повідомлення, щоб створити її.",
+    "zh-CN": "要使用语音，请选择已保存的 Cat 对话，或发送第一条消息来创建对话。",
+    "zh-TW": "若要使用語音，請選擇已儲存的 Cat 對話，或傳送第一則訊息來建立對話。"
   }
 }

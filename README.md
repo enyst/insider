@@ -151,7 +151,10 @@ the full answer is in the conversation. The saved answer remains complete.
 The browser's missing-sign-in message appears before microphone access.
 
 On a Canvas version with companion controls, choose a saved Cat and select
-**Start voice**. Availability is checked before requesting microphone access.
+**Start voice** beside the Cat picker or in the companion controls. Before a
+Cat is selected, the page keeps the button visible and explains that you must
+choose a saved conversation or send the first message to create one.
+Availability is checked before requesting microphone access.
 The controls display the controller identity, provider, status, and latest
 spoken exchange, and remain available while opening other Canvas pages. These
 transient transcript previews do not replace the saved Cat history. **Mute

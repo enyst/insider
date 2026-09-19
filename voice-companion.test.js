@@ -6,8 +6,10 @@ const mocked = vi.hoisted(() => ({ snapshot: {}, onChange: null }));
 vi.mock("./src/voice-session.js", () => ({
   createVoiceSession: ({ onChange }) => {
     mocked.onChange = onChange;
+    mocked.start = vi.fn();
     return {
       getSnapshot: () => mocked.snapshot,
+      start: mocked.start,
       end: vi.fn(),
       interrupt: vi.fn(),
       setMuted: vi.fn(),
@@ -25,6 +27,65 @@ afterEach(() => {
 });
 
 describe("Voice companion", () => {
+  it("keeps page voice discoverable before selection and starts only the chosen Cat", async () => {
+    const cats = ["cat-a", "cat-b"].map((id) => ({
+      id,
+      title: id,
+      tags: { smolpaws: "insider", insiderrole: "controller" },
+      execution_status: "idle",
+    }));
+    mocked.snapshot = { status: "idle", controllerId: null };
+    let mountPage;
+    const request = vi.fn(async ({ path }) => {
+      if (path.startsWith("/api/conversations/search"))
+        return { items: cats, next_page_id: null };
+      if (path === "/api/workspaces") return { workspaces: [] };
+      if (path.includes("/events/search")) return { items: [] };
+      return cats.find((cat) => path === `/api/conversations/${cat.id}`);
+    });
+    const dispose = activate({
+      apiVersion: "1",
+      backend: { id: "backend-a", orgId: null },
+      agentServer: { request },
+      registerCompanion: () => vi.fn(),
+      registerPage: (_, mount) => {
+        mountPage = mount;
+        return vi.fn();
+      },
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const unmount = mountPage({ container, navigate: vi.fn() });
+    try {
+      const query = (action) =>
+        container.querySelector(`[data-action="${action}"]`);
+      await waitFor(() => expect(query("controller").options.length).toBe(3));
+      expect(query("voice-start").textContent).toBe("voiceStart");
+      expect(query("voice-start").disabled).toBe(true);
+      expect(container.textContent).toContain("voiceChoose");
+      query("voice-start").click();
+      expect(mocked.start).not.toHaveBeenCalled();
+
+      query("controller").value = "cat-b";
+      query("controller").dispatchEvent(new Event("change"));
+      await waitFor(() => expect(query("voice-start").disabled).toBe(false));
+      query("voice-start").click();
+      expect(mocked.start).toHaveBeenCalledWith(
+        cats[1],
+        expect.any(HTMLAudioElement),
+      );
+
+      mocked.snapshot = { status: "connecting", controllerId: "cat-b" };
+      mocked.onChange();
+      expect(query("voice-start").disabled).toBe(true);
+      query("voice-start").click();
+      expect(mocked.start).toHaveBeenCalledTimes(1);
+    } finally {
+      unmount();
+      dispose();
+    }
+  });
+
   it.each(["speaking", "listening"])(
     "keeps typed requests out while voice is %s with a pending controller request",
     async (status) => {
