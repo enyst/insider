@@ -11,6 +11,7 @@ const SHARED_KEYS = new Set([
   "COMMON$WORKING",
   "COMMON$PAUSED",
   "COMMON$ERROR",
+  "SETTINGS$NAV_SECRETS",
 ]);
 const keepKey = (key) => key.startsWith("INSIDER_CAT$") || SHARED_KEYS.has(key);
 

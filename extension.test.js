@@ -5,6 +5,7 @@ import { activate } from "./extension.js";
 const controller = {
   id: "22222222-2222-4222-8222-222222222222",
   title: "Insider Cat",
+  workspace: { working_dir: "/projects/example" },
   execution_status: "idle",
   tags: { smolpaws: "insider", insiderrole: "controller" },
 };
@@ -99,10 +100,14 @@ function mountApp(overrides = {}) {
   const disposeActivation = activate(host);
   const container = document.createElement("div");
   document.body.append(container);
-  let disposePage = mount({ container, path: "", navigate: host.navigate });
-  const remount = () => {
+  let disposePage = mount({
+    container,
+    path: overrides.path || "",
+    navigate: host.navigate,
+  });
+  const remount = (path = "") => {
     disposePage?.();
-    disposePage = mount({ container, path: "", navigate: host.navigate });
+    disposePage = mount({ container, path, navigate: host.navigate });
   };
   let cleaned = false;
   const cleanup = () => {
@@ -130,6 +135,308 @@ afterEach(() => {
 });
 
 describe("Insider Cat App", () => {
+  it.each(["none", "accepted", "uncertain"])(
+    "clears a recovered controller-read error and preserves the %s submission notice",
+    async (outcome) => {
+      let unavailable = false;
+      let recovered = false;
+      const app = mountApp({
+        request: ({ path, method }) => {
+          if (path.startsWith("/api/conversations/search"))
+            return { items: [controller], next_page_id: null };
+          if (path === `/api/conversations/${controller.id}` && unavailable)
+            throw new Error("HTTP request failed (502)");
+          if (
+            path.endsWith("/events") &&
+            method === "POST" &&
+            outcome === "uncertain"
+          )
+            throw new Error("Submission response lost");
+          if (path.includes("/events/search"))
+            return {
+              items: recovered
+                ? [
+                    {
+                      id: "recovered-message",
+                      llm_message: {
+                        role: "assistant",
+                        content: [
+                          {
+                            type: "text",
+                            text: "Fresh saved reply after recovery.",
+                          },
+                        ],
+                      },
+                    },
+                  ]
+                : [],
+            };
+        },
+      });
+      const notice = () =>
+        app.container.querySelector('[data-role="notice"]').textContent;
+      await waitFor(() =>
+        expect(find(app, "controller").value).toBe(controller.id),
+      );
+      if (outcome !== "none") {
+        draft(app, "Keep this request.");
+        click(app, "send");
+        await waitFor(() =>
+          expect(notice()).toContain(
+            outcome === "accepted"
+              ? "Message accepted"
+              : "Submission response lost",
+          ),
+        );
+      }
+      const submissionNotice = notice();
+      unavailable = true;
+      click(app, "refresh");
+      await waitFor(() =>
+        expect(notice()).toContain("Could not load the Cat conversation"),
+      );
+      unavailable = false;
+      recovered = true;
+      click(app, "refresh");
+      await waitFor(() =>
+        expect(app.container.textContent).toContain(
+          "Fresh saved reply after recovery.",
+        ),
+      );
+      expect(notice()).toBe(submissionNotice);
+      if (outcome === "uncertain") {
+        expect(find(app, "send").disabled).toBe(true);
+        expect(find(app, "draft").value).toBe("Keep this request.");
+      }
+    },
+  );
+
+  it("replaces the /new URL with the created Cat so reloading resumes it", async () => {
+    let createdId;
+    const request = ({ path, method, body }) => {
+      if (path === "/api/conversations" && method === "POST") {
+        createdId = body.conversation_id;
+        return { ...controller, id: createdId };
+      }
+      if (path.startsWith("/api/conversations/search"))
+        return {
+          items: createdId
+            ? [worker, { ...controller, id: createdId }]
+            : [worker],
+          next_page_id: null,
+        };
+    };
+    const first = mountApp({ path: "/new", request });
+    await waitFor(() =>
+      expect(first.container.textContent).toContain(worker.title),
+    );
+    click(first, "select-worker");
+    draft(first, "Start this Cat.");
+    click(first, "send");
+    await waitFor(() =>
+      expect(first.host.navigate).toHaveBeenCalledWith(
+        `/extensions/insider-cat/projects/conversations/${createdId}`,
+      ),
+    );
+    first.cleanup();
+    const reloaded = mountApp({ path: `/conversations/${createdId}`, request });
+    await waitFor(() =>
+      expect(find(reloaded, "controller")?.value).toBe(createdId),
+    );
+    expect(
+      reloaded.request.mock.calls.some(([call]) => call.method === "POST"),
+    ).toBe(false);
+  });
+
+  it("resumes a legacy top-level Insider while excluding delegated children and other roles", async () => {
+    const legacy = { ...controller, tags: { smolpaws: "insider" } };
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return {
+            items: [
+              legacy,
+              {
+                ...legacy,
+                id: "delegated-child",
+                parent_conversation_id: controller.id,
+              },
+              {
+                ...legacy,
+                id: "worker-role",
+                tags: { smolpaws: "insider", insiderrole: "worker" },
+              },
+            ],
+            next_page_id: null,
+          };
+        if (path === `/api/conversations/${legacy.id}`) return legacy;
+      },
+    });
+    await waitFor(() => expect(find(app, "controller")?.value).toBe(legacy.id));
+    expect(find(app, "controller").options.length).toBe(2);
+    draft(app, "Continue our old conversation.");
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: `/api/conversations/${legacy.id}/events`,
+          method: "POST",
+        }),
+      ),
+    );
+    expect(
+      app.request.mock.calls.some(
+        ([call]) =>
+          call.path === "/api/conversations" && call.method === "POST",
+      ),
+    ).toBe(false);
+    expect(
+      app.request.mock.calls.some(([call]) => call.method === "PATCH"),
+    ).toBe(false);
+  });
+
+  it("condenses the selected Cat without creating or sending another conversation", async () => {
+    const app = mountApp({
+      request: ({ path }) =>
+        path.startsWith("/api/conversations/search")
+          ? { items: [controller], next_page_id: null }
+          : undefined,
+    });
+    await waitFor(() =>
+      expect(find(app, "controller")?.value).toBe(controller.id),
+    );
+    draft(app, "/condense");
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith({
+        path: `/api/conversations/${controller.id}/condense`,
+        method: "POST",
+      }),
+    );
+    await waitFor(() =>
+      expect(app.container.textContent).toContain("Conversation condensed"),
+    );
+    expect(find(app, "controller").value).toBe(controller.id);
+    expect(
+      app.request.mock.calls.filter(([call]) => call.method === "POST"),
+    ).toHaveLength(1);
+  });
+
+  it("preserves an approval request when /condense is entered", async () => {
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path === `/api/conversations/${controller.id}`)
+          return {
+            ...controller,
+            execution_status: "waiting_for_confirmation",
+          };
+      },
+    });
+    await waitFor(() =>
+      expect(find(app, "controller")?.value).toBe(controller.id),
+    );
+    draft(app, "/condense");
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.container.textContent).toContain(
+        "resolve its approval request",
+      ),
+    );
+    expect(
+      app.request.mock.calls.some(([call]) => call.method === "POST"),
+    ).toBe(false);
+    expect(find(app, "draft").value).toBe("/condense");
+  });
+
+  it("handles /new locally and creates a second durable Cat on the next message", async () => {
+    const app = mountApp({
+      path: `/conversations/${controller.id}`,
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return {
+            items: [worker, { ...controller, workspace: worker.workspace }],
+            next_page_id: null,
+          };
+      },
+    });
+    await waitFor(() =>
+      expect(find(app, "controller")?.value).toBe(controller.id),
+    );
+    draft(app, "/new");
+    click(app, "send");
+    expect(find(app, "controller").value).toBe("");
+    expect(find(app, "draft").value).toBe("");
+    expect(app.host.navigate).toHaveBeenCalledWith(
+      "/extensions/insider-cat/projects/new",
+    );
+    expect(
+      app.request.mock.calls.some(([call]) => call.method === "POST"),
+    ).toBe(false);
+    draft(app, "A separate planning conversation.");
+    click(app, "send");
+    await waitFor(() =>
+      expect(
+        app.request.mock.calls.some(
+          ([call]) =>
+            call.path === "/api/conversations" && call.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const create = app.request.mock.calls.find(
+      ([call]) => call.path === "/api/conversations" && call.method === "POST",
+    )[0];
+    expect(create.body.conversation_id).not.toBe(controller.id);
+    expect(create.body.tags).toEqual(controller.tags);
+    expect(create.body.workspace).toEqual(worker.workspace);
+    expect(create.body.initial_message.content[0].text).not.toContain("/new");
+  });
+
+  it("resumes an explicit older Cat link and remembers it across activation", async () => {
+    const older = { ...controller, id: "44444444-4444-4444-8444-444444444444" };
+    const request = ({ path }) => {
+      if (path.startsWith("/api/conversations/search"))
+        return { items: [controller, older], next_page_id: null };
+    };
+    const first = mountApp({ request, path: `/conversations/${older.id}` });
+    await waitFor(() =>
+      expect(find(first, "controller")?.value).toBe(older.id),
+    );
+    click(first, "open-controller");
+    expect(first.host.navigate).toHaveBeenCalledWith(
+      `/conversations/${older.id}`,
+    );
+    first.cleanup();
+    const resumed = mountApp({ request });
+    await waitFor(() =>
+      expect(find(resumed, "controller")?.value).toBe(older.id),
+    );
+    expect(
+      resumed.request.mock.calls.some(([call]) => call.method === "POST"),
+    ).toBe(false);
+  });
+
+  it("rejects an explicit regular-worker ID instead of silently switching the Cat", async () => {
+    const app = mountApp({
+      path: `/conversations/${worker.id}`,
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [worker, controller], next_page_id: null };
+      },
+    });
+    await waitFor(() =>
+      expect(app.container.textContent).toContain(
+        "This conversation is not an Insider controller",
+      ),
+    );
+    expect(find(app, "controller").value).toBe("");
+    expect(find(app, "send").disabled).toBe(true);
+    expect(
+      app.request.mock.calls.some(([call]) => call.method === "POST"),
+    ).toBe(false);
+  });
+
   it("loads explicit pages, keeps drafts when a full-ID worker is selected, and navigates inside Canvas", async () => {
     const app = mountApp({
       request: ({ path }) => {
@@ -363,11 +670,17 @@ describe("Insider Cat App", () => {
     expect(find(app, "controller").value).toBe("");
     expect(find(app, "send").disabled).toBe(true);
     click(app, "new-cat");
+    expect(app.host.navigate).toHaveBeenCalledWith(
+      "/extensions/insider-cat/projects/new",
+    );
     expect(find(app, "send").disabled).toBe(false);
     expect(find(app, "controller").options.length).toBe(3);
     find(app, "controller").value = another.id;
     find(app, "controller").dispatchEvent(
       new Event("change", { bubbles: true }),
+    );
+    expect(app.host.navigate).toHaveBeenCalledWith(
+      `/extensions/insider-cat/projects/conversations/${another.id}`,
     );
     await waitFor(() =>
       expect(
