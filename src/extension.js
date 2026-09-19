@@ -411,6 +411,7 @@ export function activate(host) {
               : state.controller
                 ? "voiceHelp"
                 : "voiceChoose",
+            { newCat: t("newCat") },
           );
           action("send").disabled =
             state.busy ||
