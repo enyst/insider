@@ -305,6 +305,17 @@ They cover durable conversation identity, pagination, draft and target handling,
 confirmation settings, uncertain requests, lifecycle cleanup, localization,
 same-ID resume and condensation, and simulated WebRTC interruption/cancellation.
 
+Maintenance verification, **October 19, 2026**: the App draft already includes
+its current `main` (`521362c`), so no App merge was necessary. `npm run build`
+reproduced the committed bundle unchanged, and all **129 tests** passed. The
+current Canvas host API v1 and Agent Server profile-launch and Voice contracts
+remain compatible with this App. The paired [Canvas draft](https://github.com/OpenHands/OpenHands/pull/17558)
+and [Agent Server draft](https://github.com/OpenHands/software-agent-sdk/pull/5180)
+record their own upstream integration and checks. This is source and regression
+verification; the September live Voice results above remain dated evidence.
+This maintenance pass did not restart the development stack or repeat live
+provider, browser, or physical-device audio tests.
+
 ## License
 
 [MIT](LICENSE). See [NOTICE.md](NOTICE.md) for source attribution and bundled
