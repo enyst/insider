@@ -618,9 +618,10 @@ export function createVoiceSession({
             (responseId && event.response_id === responseId)
           )
             transcript("assistant", event.transcript);
-        } else if (event.type === "response.function_call_arguments.done")
+        } else if (event.type === "response.function_call_arguments.done") {
+          if (!event.response_id || event.response_id !== responseId) return;
           void toolCall(event, id, version);
-        else if (event.type === "input_audio_buffer.speech_started") {
+        } else if (event.type === "input_audio_buffer.speech_started") {
           suppressPlayback(false);
           publish({ status: pendingTool ? "thinking" : "listening" });
         } else if (event.type === "output_audio_buffer.started") {

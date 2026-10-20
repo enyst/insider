@@ -98,6 +98,7 @@ function setup(overrides = {}) {
     await session.start(controller, audio);
     peers.at(-1)?.channel.onopen?.();
     if (peers.at(-1)) {
+      peers.at(-1).channel.onmessage({data: JSON.stringify({type: "response.created", response: {id: "voice-response"}})});
       peers.at(-1).connectionState = "connected";
       peers.at(-1).onconnectionstatechange?.();
     }
@@ -125,10 +126,32 @@ const toolEvent = {
   type: "response.function_call_arguments.done",
   name: "send_to_insider",
   call_id: "tool-call-a",
+  response_id: "voice-response",
   arguments: JSON.stringify({ request: "Explain the current state." }),
 };
 
 describe("Insider voice lifecycle", () => {
+  it("rejects function calls without a response owner even before interruption", async () => {
+    const app = setup();
+    await app.start();
+    app.emit({...toolEvent, response_id: undefined});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.request.mock.calls.some(([call]) => call.method === "POST" && call.path.endsWith("/events"))).toBe(false);
+    expect(app.sent().some(event => event.type === "response.create")).toBe(false);
+  });
+
+  it.each(["send_to_insider", "end_voice_call"])("ignores late %s function calls from a superseded response", async (name) => {
+    const app = setup();
+    await app.start();
+    app.emit({type: "response.created", response: {id: "old"}});
+    app.session.noteTypedInput();
+    app.emit({...toolEvent, name, response_id: "old", arguments: name === "end_voice_call" ? "{}" : toolEvent.arguments});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.request.mock.calls.some(([call]) => call.method === "POST" && call.path.endsWith("/events"))).toBe(false);
+    expect(track.stop).not.toHaveBeenCalled();
+    expect(app.sent().some(event => event.type === "response.create")).toBe(false);
+  });
+
   it("allows one server-VAD reply for the current committed utterance, but not old audio", async () => {
     const app = setup();
     await app.start();
@@ -200,6 +223,8 @@ describe("Insider voice lifecycle", () => {
     await app.start();
     app.emit({type: "input_audio_buffer.speech_started"});
     expect(app.sent().some(event => event.type === "response.cancel")).toBe(false);
+    app.emit({type: "input_audio_buffer.committed", item_id: "current"});
+    app.emit({type: "response.created", response: {id: "voice-response"}});
     app.emit(toolEvent);
     await vi.advanceTimersByTimeAsync(0);
     app.setStatus("finished");
@@ -219,7 +244,10 @@ describe("Insider voice lifecycle", () => {
     const app = setup();
     await app.start();
     app.session.noteTypedInput();
-    // A current reply is permitted only by metadata copied from our request.
+    // Begin a new spoken request after the typed input fenced the old one.
+    app.emit({type: "input_audio_buffer.speech_started"});
+    app.emit({type: "input_audio_buffer.committed", item_id: "current"});
+    app.emit({type: "response.created", response: {id: "voice-response"}});
     app.emit(toolEvent);
     await vi.advanceTimersByTimeAsync(0);
     app.setStatus("finished");
@@ -345,6 +373,7 @@ describe("Insider voice lifecycle", () => {
       type: "response.function_call_arguments.done",
       name: "end_voice_call",
       call_id: "end-tool",
+      response_id: "voice-response",
       arguments: "{}",
     });
     expect(track.stop).toHaveBeenCalledOnce();
@@ -1120,6 +1149,7 @@ describe("Codex server-owned voice relay", () => {
     app.emit({
       type: "response.function_call_arguments.done",
       name: "end_voice_call",
+      response_id: "voice-response",
       arguments: "{}",
     });
     app.session.interrupt();

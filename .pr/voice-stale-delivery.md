@@ -18,7 +18,7 @@ Already queued provider audio cannot be revoked by this server change. Local sup
 
 ## Verification
 
-- App: `npm run build`; **144 tests / 10 files**; `git diff --check` pass. The repo has no typecheck script.
+- App: `npm run build`; **147 tests / 10 files**; `git diff --check` pass. The repo has no typecheck script.
 - Server: **52 tests** (Codex relay real subprocess protocol fixture plus voice router), **1 live-socket voice route test**, Ruff, and Pyright pass. Tests use the existing sibling checkout's Python environment with this branch first on PYTHONPATH. Pyright uses that interpreter explicitly.
 - New App and server regressions failed before implementation.
 - No live microphone, provider login/calls, deployment, paid resources, or running-user-service changes.
@@ -33,3 +33,9 @@ permission, typing, and call restart. A committed-input epoch now grants one
 metadata-less response ownership; cancellation/typing resets that permission.
 Also coalesced repeated typed suppression after the same pending tool is fenced,
 while preserving the first invalidation. Two new tests failed before the fixes.
+
+Follow-up review found that late function-call events could adopt the new input
+epoch and dispatch old work. Reproduced both late delegation and late hangup
+with failing tests. Function-call events now require the currently owned
+response ID before any saved work or call control can run. Missing owners fail
+closed. Current owned delegation/hangup remain covered.
