@@ -31,8 +31,10 @@ export function mountCatVoice({
   startButton.textContent = t("voiceStart");
   startButton.onclick = start;
   action("mute").onclick = () => voice.setMuted(!voice.getSnapshot().muted);
-  action("interrupt").textContent = t("voiceInterrupt");
-  action("interrupt").onclick = () => voice.interrupt();
+  action("interrupt").onclick = () =>
+    voice.getSnapshot().speakerSuppressed
+      ? voice.resumePlayback()
+      : voice.interrupt();
   action("end").textContent = t("voiceEnd");
   action("end").onclick = () => voice.end();
   action("setup").textContent = t("voiceSetup");
@@ -92,20 +94,22 @@ export function mountCatVoice({
             ? t(execution)
             : pose === "working"
               ? t("voiceThinking")
-              : pose === "speaking"
-                ? t("voiceSpeaking")
-                : current.muted && connected
-                  ? t("voiceMuted")
-                  : t(
-                      {
-                        idle: "resting",
-                        error: "error",
-                        connecting: "voiceConnecting",
-                        listening: "voiceListening",
-                        thinking: "voiceThinking",
-                        speaking: "voiceSpeaking",
-                      }[current.status] || "resting",
-                    );
+              : current.speakerSuppressed && connected
+                ? t("voiceAudioSuppressed")
+                : pose === "speaking"
+                  ? t("voiceSpeaking")
+                  : current.muted && connected
+                    ? t("voiceMuted")
+                    : t(
+                        {
+                          idle: "resting",
+                          error: "error",
+                          connecting: "voiceConnecting",
+                          listening: "voiceListening",
+                          thinking: "voiceThinking",
+                          speaking: "voiceSpeaking",
+                        }[current.status] || "resting",
+                      );
     role("voice-status").textContent = status;
     root.dataset.attention = String(pose === "attention");
     startButton.hidden = connected;
@@ -114,7 +118,11 @@ export function mountCatVoice({
     action("mute").disabled = current.status === "connecting";
     action("mute").textContent = t(current.muted ? "voiceUnmute" : "voiceMute");
     action("mute").setAttribute("aria-pressed", String(Boolean(current.muted)));
-    action("interrupt").hidden = !connected || current.provider === "codex";
+    action("interrupt").hidden = !connected;
+    action("interrupt").disabled = current.status === "connecting";
+    action("interrupt").textContent = t(
+      current.speakerSuppressed ? "voiceResumeAudio" : "voiceInterrupt",
+    );
     action("end").hidden = !connected;
     action("setup").hidden = current.error !== "voiceKeyMissing";
     if (compact)

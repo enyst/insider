@@ -259,9 +259,11 @@ appears only away from Projects, keeping the call controls available without a
 second voice panel on the Cat page. Navigation preserves the same audio element,
 connection, and Cat identity. The transient transcript does not replace the
 saved Cat history. **Mute**, **Unmute**, and **End call** work with both providers.
-**Stop speaking** is available for the OpenAI API transport; Codex's current
-app-server API does not expose this operation, so the button is hidden in Codex
-mode. Ending a call or interrupting speech does not cancel accepted agent work.
+**Stop speaking** cancels speech with the OpenAI API transport. With Codex, it
+silences local playback until you select **Resume audio**. Codex's current
+app-server API cannot cancel speech, so resuming may make ongoing speech audible;
+it does not request a new answer. The microphone stays in its current state.
+Ending a call or interrupting speech does not cancel accepted agent work.
 Changing Cat, starting a new Cat, changing backend, disabling the App, or ending
 the call releases the microphone and closes the connection. Returning to the
 same Cat page keeps the call connected.
