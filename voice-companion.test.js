@@ -7,11 +7,14 @@ vi.mock("./src/voice-session.js", () => ({
   createVoiceSession: ({ onChange }) => {
     mocked.onChange = onChange;
     mocked.start = vi.fn();
+    mocked.resumePlayback = vi.fn();
+    mocked.interrupt = vi.fn();
     return {
       getSnapshot: () => mocked.snapshot,
       start: mocked.start,
       end: vi.fn(),
-      interrupt: vi.fn(),
+      interrupt: mocked.interrupt,
+      resumePlayback: mocked.resumePlayback,
       setMuted: vi.fn(),
     };
   },
@@ -181,19 +184,29 @@ describe("Voice companion", () => {
     expect(query("transcripts").open).toBe(false);
     expect(query("transcripts").textContent).toContain("user: <b>Hello</b>");
     expect(query("transcripts").querySelector("b")).toBeNull();
-    expect(button("interrupt").hidden).toBe(true);
+    expect(button("interrupt").hidden).toBe(false);
+    mocked.snapshot = { ...mocked.snapshot, speakerSuppressed: true };
+    mocked.onChange();
+    expect(button("interrupt").textContent).toBe("voiceResumeAudio");
+    expect(query("voice-status").textContent).toBe("voiceAudioSuppressed");
+    button("interrupt").click();
+    expect(mocked.resumePlayback).toHaveBeenCalledOnce();
+    expect(mocked.interrupt).not.toHaveBeenCalled();
     expect(button("mute").hidden).toBe(false);
     expect(button("end").hidden).toBe(false);
 
     mocked.snapshot = {
       ...mocked.snapshot,
       provider: "openai",
+      speakerSuppressed: false,
       transcripts: {},
     };
     mocked.onChange();
     expect(query("provider")).toBeNull();
     expect(query("transcripts").hidden).toBe(true);
     expect(button("interrupt").hidden).toBe(false);
+    button("interrupt").click();
+    expect(mocked.interrupt).toHaveBeenCalledOnce();
     mocked.snapshot = { ...mocked.snapshot, muted: true, status: "speaking" };
     mocked.onChange();
     expect(query("voice-status").textContent).toBe("voiceSpeaking");

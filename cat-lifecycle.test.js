@@ -242,7 +242,7 @@ describe("Cat page and companion lifecycle", () => {
       expect(action(page.container, "mute").getAttribute("aria-pressed")).toBe(
         "true",
       );
-      expect(action(page.container, "interrupt").hidden).toBe(true);
+      expect(action(page.container, "interrupt").hidden).toBe(false);
       expect(
         page.container.querySelector('[data-role="transcript-lines"]')
           .textContent,

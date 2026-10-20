@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { catAvatarMarkup, catPose } from "./src/cat-avatar.js";
 
 describe("Cat avatar state", () => {
+  it("does not animate suppressed output as speech or hide pending work", () => {
+    expect(catPose({voice: {status: "speaking", speakerSuppressed: true}})).toBe("listening");
+    expect(catPose({voice: {status: "speaking", speakerSuppressed: true, requestPending: true}})).toBe("working");
+  });
+
   it.each([undefined, "idle", "finished"])(
     "rests immediately when controller status is %s and no work or call is active",
     (execution_status) => {

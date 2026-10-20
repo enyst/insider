@@ -14,7 +14,8 @@ export function catPose({ voice = {}, controller, busy = false } = {}) {
     ATTENTION_STATUSES.has(controller?.execution_status)
   )
     return "attention";
-  if (voice.status === "speaking") return "speaking";
+  if (voice.status === "speaking" && !voice.speakerSuppressed)
+    return "speaking";
   if (
     busy ||
     voice.requestPending ||
@@ -23,7 +24,8 @@ export function catPose({ voice = {}, controller, busy = false } = {}) {
   )
     return "working";
   if (voice.status === "connecting") return "waking";
-  if (voice.status === "listening") return voice.muted ? "waking" : "listening";
+  if (voice.status === "listening" || voice.speakerSuppressed)
+    return voice.muted ? "waking" : "listening";
   return "sleeping";
 }
 

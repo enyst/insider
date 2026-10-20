@@ -52,6 +52,7 @@ export function createVoiceSession({
   let connectionTimer = null;
   let releasePoll = null;
   let speechEpoch = 0;
+  let playbackAttempt = 0;
   let pendingTool = false;
   let mediaConnected = false;
   let brokerStatus = "listening";
@@ -60,6 +61,7 @@ export function createVoiceSession({
     status: "idle",
     controllerId: null,
     muted: false,
+    speakerSuppressed: false,
     error: null,
     provider: null,
     requestPending: false,
@@ -105,6 +107,7 @@ export function createVoiceSession({
   function end() {
     ++generation;
     ++speechEpoch;
+    ++playbackAttempt;
     clearTimeout(connectionTimer);
     connectionTimer = null;
     clearTimeout(pollTimer);
@@ -132,6 +135,7 @@ export function createVoiceSession({
       status: "idle",
       controllerId: null,
       muted: false,
+      speakerSuppressed: false,
       error: null,
       provider: null,
       requestPending: false,
@@ -145,9 +149,31 @@ export function createVoiceSession({
     end();
     publish({ status: "error", error, controllerId, provider });
   }
+  function play(version) {
+    if (!audio || snapshot.speakerSuppressed) return;
+    const attempt = ++playbackAttempt;
+    void audio.play().catch(() => {
+      if (attempt === playbackAttempt && !snapshot.speakerSuppressed)
+        fail("voicePlaybackBlocked", version);
+    });
+  }
+  function resumePlayback() {
+    if (!audio || !snapshot.speakerSuppressed) return;
+    audio.muted = false;
+    publish({ speakerSuppressed: false });
+    if (audio.srcObject) play(generation);
+  }
   function interrupt() {
-    // Codex's experimental app-server API has no speech interruption operation.
-    if (snapshot.provider === "codex") return;
+    if (!audio) return;
+    ++playbackAttempt;
+    if (snapshot.provider === "codex") {
+      // There is no Codex speech-cancel RPC. Keep playback suppressed until the
+      // user resumes it; a caption or poll cannot identify a fresh audio answer.
+      audio.muted = true;
+      audio.pause();
+      publish({ speakerSuppressed: true });
+      return;
+    }
     ++speechEpoch;
     send({ type: "response.cancel" });
     send({ type: "output_audio_buffer.clear" });
@@ -423,6 +449,7 @@ export function createVoiceSession({
       return;
     }
     audio = audioElement;
+    audio.muted = false;
     publish({ status: "connecting", controllerId: id });
     try {
       // A canceled setup may still return a call ID that needs a scoped hangup.
@@ -468,7 +495,7 @@ export function createVoiceSession({
       peer.ontrack = (event) => {
         if (!active(version) || !audio) return;
         audio.srcObject = event.streams[0];
-        void audio.play().catch(() => fail("voicePlaybackBlocked", version));
+        play(version);
       };
       peer.onconnectionstatechange = () => {
         if (!active(version)) return;
@@ -528,7 +555,7 @@ export function createVoiceSession({
           audio?.pause();
           publish({ status: pendingTool ? "thinking" : "listening" });
         } else if (event.type === "output_audio_buffer.started") {
-          void audio?.play().catch(() => fail("voicePlaybackBlocked", version));
+          play(version);
           publish({ status: "speaking" });
         } else if (
           event.type === "output_audio_buffer.stopped" ||
@@ -580,5 +607,12 @@ export function createVoiceSession({
       );
     }
   }
-  return { start, end, interrupt, setMuted, getSnapshot: () => snapshot };
+  return {
+    start,
+    end,
+    interrupt,
+    resumePlayback,
+    setMuted,
+    getSnapshot: () => snapshot,
+  };
 }
