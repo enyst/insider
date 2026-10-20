@@ -264,8 +264,8 @@ silences local playback until you select **Resume audio**. Codex's current
 app-server API cannot cancel speech, so resuming may make ongoing speech audible;
 it does not request a new answer. The microphone stays in its current state.
 New speech or typing also suppresses old playback. OpenAI resumes automatically
-only for a reply tagged with the current input generation; old output events
-cannot restart it. Codex remains silent until **Resume audio**, because its
+for a reply tagged with the current input generation, or one server-VAD reply
+after the current spoken input commits. Old output events cannot restart it. Codex remains silent until **Resume audio**, because its
 pinned protocol does not identify which queued speech belongs to which input.
 Superseded OpenAI tool results stay in the saved Cat conversation; Voice receives
 a superseded notice instead of the old answer.

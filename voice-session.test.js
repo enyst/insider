@@ -129,6 +129,58 @@ const toolEvent = {
 };
 
 describe("Insider voice lifecycle", () => {
+  it("allows one server-VAD reply for the current committed utterance, but not old audio", async () => {
+    const app = setup();
+    await app.start();
+    app.emit({type: "response.created", response: {id: "old"}});
+    app.emit({type: "input_audio_buffer.speech_started"});
+    app.emit({type: "input_audio_buffer.committed", item_id: "utterance-a"});
+    app.emit({type: "response.created", response: {id: "clarification"}});
+    app.emit({type: "output_audio_buffer.started", response_id: "old"});
+    expect(app.audio.muted).toBe(true);
+    app.emit({type: "output_audio_buffer.started", response_id: "clarification"});
+    expect(app.audio.muted).toBe(false);
+    expect(app.session.getSnapshot().status).toBe("speaking");
+    app.emit({type: "response.audio_transcript.done", response_id: "clarification", transcript: "Which project?"});
+    expect(app.session.getSnapshot().transcripts.assistant).toBe("Which project?");
+    app.emit({type: "response.created", response: {id: "unowned"}});
+    app.emit({type: "output_audio_buffer.stopped", response_id: "unowned"});
+    expect(app.session.getSnapshot().status).toBe("speaking");
+  });
+
+  it("clears server-response permission on typed input and call restart", async () => {
+    const app = setup();
+    await app.start();
+    app.emit({type: "input_audio_buffer.speech_started"});
+    app.emit({type: "input_audio_buffer.committed", item_id: "old-utterance"});
+    app.session.noteTypedInput();
+    app.emit({type: "response.created", response: {id: "late-ack"}});
+    app.emit({type: "output_audio_buffer.started", response_id: "late-ack"});
+    expect(app.audio.muted).toBe(true);
+    app.session.end();
+    await app.start();
+    app.session.interrupt();
+    app.emit({type: "response.created", response: {id: "late-from-old-call"}});
+    app.emit({type: "output_audio_buffer.started", response_id: "late-from-old-call"});
+    expect(app.audio.muted).toBe(true);
+  });
+
+  it("does not resend cancellation for every keystroke while an old tool is already fenced", async () => {
+    const app = setup();
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    app.session.noteTypedInput();
+    app.session.noteTypedInput();
+    app.session.noteTypedInput();
+    expect(app.sent().filter(event => event.type === "response.cancel")).toHaveLength(1);
+    app.setStatus("finished");
+    app.setEvents([{id: "new-old-answer", action: {kind: "FinishAction", message: "Old"}}]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = app.sent().find(event => event.item?.call_id === toolEvent.call_id);
+    expect(JSON.parse(result.item.output).status).toBe("superseded");
+  });
+
   it("keeps interrupted OpenAI audio silent through late output and track callbacks", async () => {
     const app = setup();
     await app.start();

@@ -55,6 +55,8 @@ export function createVoiceSession({
   let playbackAttempt = 0;
   let responseId = null;
   let requireOwnedResponse = false;
+  let autoResponseEpoch = null;
+  let pendingToolEpoch = null;
   let pendingTool = false;
   let mediaConnected = false;
   let brokerStatus = "listening";
@@ -112,6 +114,8 @@ export function createVoiceSession({
     ++playbackAttempt;
     responseId = null;
     requireOwnedResponse = false;
+    autoResponseEpoch = null;
+    pendingToolEpoch = null;
     clearTimeout(connectionTimer);
     connectionTimer = null;
     clearTimeout(pollTimer);
@@ -173,6 +177,7 @@ export function createVoiceSession({
     ++speechEpoch;
     responseId = null;
     requireOwnedResponse = true;
+    autoResponseEpoch = null;
     audio.muted = true;
     audio.pause();
     if (cancelResponse && snapshot.provider === "openai") {
@@ -192,6 +197,14 @@ export function createVoiceSession({
     suppressPlayback(true);
   }
   function noteTypedInput() {
+    if (
+      snapshot.speakerSuppressed &&
+      requireOwnedResponse &&
+      !responseId &&
+      autoResponseEpoch === null &&
+      (!pendingTool || pendingToolEpoch !== speechEpoch)
+    )
+      return;
     suppressPlayback(true);
   }
   function setMuted(muted) {
@@ -420,6 +433,7 @@ export function createVoiceSession({
       };
     } else {
       pendingTool = true;
+      pendingToolEpoch = epoch;
       // Speech status can change while this saved request is still running.
       // Expose its lifetime separately so typed input cannot race its result.
       publish({ status: "thinking", requestPending: true });
@@ -433,7 +447,10 @@ export function createVoiceSession({
             "The connection failed. Check the saved Cat conversation before retrying; the request might already have been accepted. Do not resend automatically.",
         };
       } finally {
-        if (active(version)) pendingTool = false;
+        if (active(version)) {
+          pendingTool = false;
+          pendingToolEpoch = null;
+        }
       }
     }
     if (!active(version) || output === null) return;
@@ -572,12 +589,19 @@ export function createVoiceSession({
             suppressPlayback(false);
           return;
         }
+        if (event.type === "input_audio_buffer.committed") {
+          autoResponseEpoch = speechEpoch;
+          return;
+        }
         if (event.type === "response.created") {
           const response = event.response;
+          const taggedEpoch = response?.metadata?.insider_input_epoch;
           const owned =
-            response?.metadata?.insider_input_epoch === String(speechEpoch);
+            taggedEpoch === String(speechEpoch) ||
+            (taggedEpoch == null && autoResponseEpoch === speechEpoch);
           if (response?.id && (owned || !requireOwnedResponse)) {
             responseId = response.id;
+            if (owned) autoResponseEpoch = null;
           }
           return;
         }

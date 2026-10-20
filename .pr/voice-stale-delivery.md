@@ -5,7 +5,7 @@ Bead: `smolpaws-vstale`. Separate from follow-up steering (`smolpaws-vsteer`).
 ## App
 
 - New speech or nonempty typed input invalidates prior playback and pending answer delivery. Typing does not submit a request.
-- After interruption, OpenAI audio resumes automatically only for a response with the current request metadata and matching response ID. Late starts/stops/captions cannot change the current owner. Explicit Resume audio remains available.
+- After interruption, OpenAI audio resumes automatically only for a response with the current request metadata, or a single server-VAD response following the current committed input, and matching response ID. Late starts/stops/captions cannot change the current owner. Explicit Resume audio remains available.
 - Superseded tool calls receive a superseded receipt instead of the old answer. Their durable Cat result stays saved.
 - Automatic barge-in only suppresses local playback; server VAD owns response interruption. It does not send a cancellation that could race the next delegation.
 - Codex browser events never dispatch requests. A speech-start event, if provided by the pinned transport, can only suppress playback. Codex still requires explicit resume because the protocol cannot causally identify queued audio.
@@ -18,9 +18,18 @@ Already queued provider audio cannot be revoked by this server change. Local sup
 
 ## Verification
 
-- App: `npm run build`; **141 tests / 10 files**; `git diff --check` pass. The repo has no typecheck script.
+- App: `npm run build`; **144 tests / 10 files**; `git diff --check` pass. The repo has no typecheck script.
 - Server: **52 tests** (Codex relay real subprocess protocol fixture plus voice router), **1 live-socket voice route test**, Ruff, and Pyright pass. Tests use the existing sibling checkout's Python environment with this branch first on PYTHONPATH. Pyright uses that interpreter explicitly.
 - New App and server regressions failed before implementation.
 - No live microphone, provider login/calls, deployment, paid resources, or running-user-service changes.
 
 This change does not remove the pending-request guard or enable steering. Keep that next bead separate.
+
+## Review fixes
+
+CodeRabbit identified metadata-less server-VAD replies being silenced. Added
+regressions for acknowledgments/clarifications, stale audio, consumed commit
+permission, typing, and call restart. A committed-input epoch now grants one
+metadata-less response ownership; cancellation/typing resets that permission.
+Also coalesced repeated typed suppression after the same pending tool is fenced,
+while preserving the first invalidation. Two new tests failed before the fixes.
