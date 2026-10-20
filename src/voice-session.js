@@ -551,6 +551,7 @@ export function createVoiceSession({
         else if (event.type === "response.function_call_arguments.done")
           void toolCall(event, id, version);
         else if (event.type === "input_audio_buffer.speech_started") {
+          ++playbackAttempt;
           ++speechEpoch;
           audio?.pause();
           publish({ status: pendingTool ? "thinking" : "listening" });

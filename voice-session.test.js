@@ -151,6 +151,19 @@ describe("Insider voice lifecycle", () => {
     expect(track.stop).not.toHaveBeenCalled();
   });
 
+  it("does not fail when automatic speech interruption aborts a pending play promise", async () => {
+    const app = setup();
+    await app.start();
+    let reject;
+    app.audio.play.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    peers[0].ontrack({ streams: [media] });
+    app.emit({ type: "input_audio_buffer.speech_started" });
+    reject(new DOMException("Playback interrupted by pause", "AbortError"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({ status: "listening", error: null });
+    expect(track.stop).not.toHaveBeenCalled();
+  });
+
   it("preserves OpenAI calls whose SDP response has no remote call ID", async () => {
     const app = setup({
       request: (call) =>

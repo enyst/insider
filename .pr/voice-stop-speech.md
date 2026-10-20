@@ -14,7 +14,7 @@ Bead: `smolpaws-vstop`. First of three separate changes. Based on the current In
 
 - Regression tests failed before implementation (4 failures, 57 passes in the initial focused run).
 - `npm run build`: pass; checked-in standalone bundle rebuilt.
-- `npm test`: 135 tests pass across 10 files, including lifecycle/language remounts and bundle/source equality.
+- `npm test`: 136 tests pass across 10 files, including lifecycle/language remounts and bundle/source equality.
 - `git diff --check`: pass.
 - `npm run typecheck`: unavailable; this JavaScript repository has no typecheck script. No typecheck success is claimed.
 - No live microphone, account login, provider call, deployment, or service restart. Media behavior is covered with controlled WebRTC/audio test doubles, not physical playback proof.
@@ -24,3 +24,11 @@ Bead: `smolpaws-vstop`. First of three separate changes. Based on the current In
 Automatic barge-in and stale-answer ownership: `smolpaws-vstale`.
 Spoken and typed follow-up steering: `smolpaws-vsteer`.
 This change does not remove the existing pending-request guard or upgrade the Codex relay.
+
+## Fresh review (October 20)
+
+Found and reproduced a missed cancellation path: automatic OpenAI speech-start
+paused audio without invalidating an outstanding play promise. Its subsequent
+AbortError could incorrectly end the call. Added a failing regression and
+invalidated that attempt before pausing. Explicit-stop and call-reset guards
+remain covered separately.
