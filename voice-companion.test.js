@@ -9,8 +9,10 @@ vi.mock("./src/voice-session.js", () => ({
     mocked.start = vi.fn();
     mocked.resumePlayback = vi.fn();
     mocked.interrupt = vi.fn();
+    mocked.noteTypedInput = vi.fn();
     return {
       getSnapshot: () => mocked.snapshot,
+      noteTypedInput: mocked.noteTypedInput,
       start: mocked.start,
       end: vi.fn(),
       interrupt: mocked.interrupt,
@@ -132,6 +134,7 @@ describe("Voice companion", () => {
         await waitFor(() => expect(query("controller").value).toBe("cat-a"));
         query("draft").value = "A typed follow-up";
         query("draft").dispatchEvent(new Event("input", { bubbles: true }));
+        expect(mocked.noteTypedInput).toHaveBeenCalledOnce();
         query("send").click();
         expect(
           request.mock.calls.some(([call]) => call.method === "POST"),
