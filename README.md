@@ -307,16 +307,21 @@ They cover durable conversation identity, pagination, draft and target handling,
 confirmation settings, uncertain requests, lifecycle cleanup, localization,
 same-ID resume and condensation, and simulated WebRTC interruption/cancellation.
 
-Maintenance verification, **October 19, 2026**: the App draft already includes
-its current `main` (`521362c`), so no App merge was necessary. `npm run build`
-reproduced the committed bundle unchanged, and all **129 tests** passed. The
-current Canvas host API v1 and Agent Server profile-launch and Voice contracts
+Maintenance verification, **October 23, 2026**: the App draft still includes
+its current `main` (`521362c`), so no App merge was necessary. Since the October
+19 check, [PR #3](https://github.com/enyst/insider/pull/3) added local Codex
+**Stop speaking / Resume audio** controls to the draft (`4ea3a5a`), without a new
+server protocol or cancellation of saved Cat work. `npm run build` reproduced
+the committed bundle unchanged, and all **136 tests across 10 files** passed.
+The Canvas host API v1 and Agent Server profile-launch and Voice contracts
 remain compatible with this App. The paired [Canvas draft](https://github.com/OpenHands/OpenHands/pull/17558)
 and [Agent Server draft](https://github.com/OpenHands/software-agent-sdk/pull/5180)
-record their own upstream integration and checks. This is source and regression
-verification; the September live Voice results above remain dated evidence.
-This maintenance pass did not restart the development stack or repeat live
-provider, browser, or physical-device audio tests.
+record their own upstream integration and checks. Automatic stale-speech and
+superseded-answer protection is separate work in [PR #4](https://github.com/enyst/insider/pull/4),
+which was still open and was not included in these checks. This is source and
+regression verification; the September live Voice results above remain dated
+evidence. This maintenance pass did not restart the development stack or repeat
+live provider, browser, or physical-device audio tests.
 
 ## License
 
