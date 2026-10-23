@@ -18,6 +18,13 @@ instructions. The controller receives the role directly; this path does not
 depend on SDK project skill discovery or an `invoke_skill` tool. Rebuild and
 commit the bundle after changing the skill.
 
+Creation also reads `/server_info` through the bound host request and appends
+validated `runtime_services` metadata: agent-side HTTP(S) addresses and
+environment-variable names for a URL, authentication key, or key-file path.
+It copies no credential values or arbitrary metadata instructions. The host
+must provide those references to the agent process. Absent or unavailable
+metadata is omitted, without substituting a default backend or blocking launch.
+
 Both `smolpaws: insider` and `insiderrole: controller` tags identify saved,
 top-level Cat conversations for discovery. Tags are metadata, not permission
 grants or a skill loader. The profile supplies the model, credentials, and
@@ -79,3 +86,37 @@ because their project contains the skill or a document mentions Insider Cat.
 The [App README](../../../README.md) describes installation and testing. The
 [behavior notes](https://enyst.github.io/arch/insider-cat.html) describe the
 App's behavior, architecture, and further coordination work.
+
+## Voice hands work to this agent
+
+As of September 20, 2026, the realtime model is the listening/speaking layer;
+the saved OpenHands Cat is the reasoning and tool-execution layer. Conceptually
+Voice calls `ask_agent(request)` and speaks the verified saved result. The
+OpenAI API transport implements that with `send_to_insider`; the Codex transport
+uses an explicit `handoff_request` that Agent Server dispatches directly. The
+inactive Codex background thread has no tools and is not the Cat's executor.
+
+Task delegation appends a user Message with `run: true`, waits for the actual
+run and stop hooks to settle, and selects the new saved answer. The SDK's
+`/ask_agent` endpoint is a different, stateless question facility; using it here
+would omit durable turns and the normal tool loop.
+
+A saved Cat with `tools: []` is still a real OpenHands agent. It lacks workspace
+and coordination tools even if built-in utilities remain available. An LLM
+profile switch does not install tools, and an active agent profile is a launch
+default for new conversations. Do not silently expand an intentionally limited
+saved agent's permissions as a side effect of connecting Voice.
+
+Normal OpenHands tools plus enabled skills are the intended starting point.
+The terminal can execute documented Agent Server API requests using
+`openhands-api` and the owning backend's runtime URL and authentication source.
+This supports counting, inspection, and authorized worker operations without
+requiring a bespoke tool for each endpoint. The browser's authenticated access
+is separate: it does not by itself configure the agent's terminal environment.
+
+Backend-wide counts need an authoritative count query; conversation listings
+must follow pagination. Loaded cards are not the backend total. A filesystem
+fallback requires a verified local persistence path and counts distinct
+conversation records, not events. Dedicated backend-bound tools could make
+these operations more convenient, but remain optional. Worker mutations stay
+explicit and subject to existing authorization and approval rules.

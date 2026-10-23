@@ -129,6 +129,41 @@ const toolEvent = {
 };
 
 describe("Insider voice lifecycle", () => {
+  it("does not treat a canceled OpenAI play attempt as a broken call", async () => {
+    const app = setup();
+    await app.start();
+    let reject;
+    app.audio.play.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    peers[0].ontrack({ streams: [media] });
+    app.session.interrupt();
+    reject(new Error("interrupted playback"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "listening",
+      error: null,
+    });
+    expect(app.sent()).toContainEqual({ type: "response.cancel" });
+    expect(track.stop).not.toHaveBeenCalled();
+  });
+
+  it("does not fail when automatic speech interruption aborts a pending play promise", async () => {
+    const app = setup();
+    await app.start();
+    let reject;
+    app.audio.play.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    peers[0].ontrack({ streams: [media] });
+    app.emit({ type: "input_audio_buffer.speech_started" });
+    reject(new DOMException("Playback interrupted by pause", "AbortError"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({ status: "listening", error: null });
+    expect(track.stop).not.toHaveBeenCalled();
+  });
+
   it("preserves OpenAI calls whose SDP response has no remote call ID", async () => {
     const app = setup({
       request: (call) =>
@@ -754,6 +789,80 @@ function setupCodex(overrides = {}) {
 }
 
 describe("Codex server-owned voice relay", () => {
+  it("ignores a playback rejection from before local suppression", async () => {
+    const app = setupCodex();
+    await app.start();
+    let reject;
+    app.audio.play.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    peers[0].ontrack({ streams: [media] });
+    app.session.interrupt();
+    reject(new Error("interrupted playback"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "listening",
+      speakerSuppressed: true,
+      error: null,
+    });
+    expect(track.stop).not.toHaveBeenCalled();
+  });
+
+  it("suppresses Codex locally until explicit resume, including late media callbacks", async () => {
+    const app = setupCodex();
+    await app.start();
+    app.session.interrupt();
+    expect(app.audio.muted).toBe(true);
+    expect(app.session.getSnapshot().speakerSuppressed).toBe(true);
+    expect(app.audio.pause).toHaveBeenCalled();
+    peers[0].ontrack({ streams: [media] });
+    expect(app.audio.muted).toBe(true);
+    expect(app.audio.play).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(app.audio.muted).toBe(true);
+    expect(app.sent()).toEqual([]);
+    expect(track.enabled).toBe(true);
+    expect(track.stop).not.toHaveBeenCalled();
+    expect(
+      app.request.mock.calls.some(([call]) =>
+        /interrupt|pause|cancel/.test(call.path),
+      ),
+    ).toBe(false);
+    app.session.resumePlayback();
+    expect(app.audio.muted).toBe(false);
+    expect(app.audio.play).toHaveBeenCalledOnce();
+    expect(app.session.getSnapshot().speakerSuppressed).toBe(false);
+  });
+
+  it("clears local speaker suppression on a fresh call without unmuting the ended element", async () => {
+    const app = setupCodex();
+    await app.start();
+    app.session.interrupt();
+    app.session.end();
+    expect(app.audio.muted).toBe(true);
+    await app.start();
+    expect(app.audio.muted).toBe(false);
+    expect(app.session.getSnapshot().speakerSuppressed).toBe(false);
+  });
+
+  it("reports blocked explicit resume and closes the scoped call", async () => {
+    const app = setupCodex();
+    await app.start();
+    peers[0].ontrack({ streams: [media] });
+    app.session.interrupt();
+    app.audio.play.mockRejectedValueOnce(new Error("blocked"));
+    app.session.resumePlayback();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "error",
+      error: "voicePlaybackBlocked",
+    });
+    expect(track.stop).toHaveBeenCalledOnce();
+  });
+
   it("ignores a previous peer's delayed events after starting a fresh call", async () => {
     const app = setupCodex();
     await app.start();
@@ -1038,7 +1147,63 @@ describe("Codex server-owned voice relay", () => {
     expect(app.session.getSnapshot()).toMatchObject({
       status: "error",
       provider: "codex",
-      error: "voiceCodexUnavailable",
+      error: "voiceConnectionFailed",
     });
+  });
+
+  it.each([
+    ["request_not_sent", "voiceRequestNotSent"],
+    ["relay_failed", "voiceRelayFailed"],
+    ["connection_failed", "voiceConnectionFailed"],
+    [undefined, "voiceConnectionFailed"],
+    ["unrecognized_provider_detail", "voiceConnectionFailed"],
+    ["constructor", "voiceConnectionFailed"],
+  ])("reports only the fixed message for call error code %s", async (code, error) => {
+    const app = setupCodex({
+      request: (call) =>
+        call.method === "GET" && call.path.endsWith("/codex_call_a")
+          ? {
+              provider: "codex",
+              status: "error",
+              error_code: code,
+              error: "Private backend detail must not reach the page",
+            }
+          : undefined,
+    });
+    await app.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "error",
+      provider: "codex",
+      controllerId: controller.id,
+      error,
+    });
+    expect(JSON.stringify(app.session.getSnapshot())).not.toContain("Private backend");
+    expect(track.stop).toHaveBeenCalledOnce();
+    expect(peers[0].close).toHaveBeenCalledOnce();
+    expect(peers[0].channel.close).toHaveBeenCalledOnce();
+    expect(app.request).toHaveBeenCalledWith({
+      method: "DELETE",
+      path: "/api/conversations/controller-a/voice/realtime/codex_call_a",
+    });
+    const requests = app.request.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(app.request.mock.calls).toHaveLength(requests);
+  });
+
+  it("does not accept an error code from a different provider", async () => {
+    const app = setupCodex({
+      request: (call) =>
+        call.method === "GET" && call.path.endsWith("/codex_call_a")
+          ? {
+              provider: "openai",
+              status: "error",
+              error_code: "request_not_sent",
+            }
+          : undefined,
+    });
+    await app.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot().error).toBe("voiceConnectionFailed");
   });
 });
