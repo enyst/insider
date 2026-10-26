@@ -94,6 +94,7 @@ function mountApp(overrides = {}) {
       mount = factory;
       return vi.fn();
     }),
+    registerCompanion: overrides.registerCompanion,
     navigate: vi.fn(),
     agentServer: { request },
   };
@@ -248,7 +249,7 @@ describe("Insider Cat App", () => {
     ).toBe(false);
   });
 
-  it("resumes an explicit Insider controller while excluding incomplete tags, children, and other roles", async () => {
+  it("resumes an explicit Insider controller while excluding unmarked conversations, children, and other roles", async () => {
     const app = mountApp({
       request: ({ path }) => {
         if (path.startsWith("/api/conversations/search"))
@@ -257,8 +258,8 @@ describe("Insider Cat App", () => {
               controller,
               {
                 ...controller,
-                id: "missing-role",
-                tags: { smolpaws: "insider" },
+                id: "missing-cat-tag",
+                tags: { insiderrole: "controller" },
               },
               {
                 ...controller,
@@ -423,6 +424,79 @@ describe("Insider Cat App", () => {
     ).toBe(false);
   });
 
+  it.each(["discovery", "deep link"])(
+    "continues a legacy Cat through %s and resumes it without replacing its identity",
+    async (entry) => {
+      const legacy = {
+        ...controller,
+        id: "55555555-5555-4555-8555-555555555555",
+        title: "Legacy Cat",
+        tags: { smolpaws: "insider" },
+      };
+      const request = ({ path }) => {
+        if (path.includes("page_id=legacy-page"))
+          return { items: [legacy], next_page_id: null };
+        if (path.startsWith("/api/conversations/search"))
+          return {
+            items: entry === "deep link" ? [worker, controller] : [worker],
+            next_page_id: "legacy-page",
+          };
+        if (path === `/api/conversations/${legacy.id}`) return legacy;
+        if (
+          path ===
+          `/api/conversations/${legacy.id}/events/search?limit=50&sort_order=TIMESTAMP_DESC`
+        )
+          return {
+            items: [
+              {
+                id: "legacy-answer",
+                llm_message: {
+                  role: "assistant",
+                  content: [{ type: "text", text: "A saved legacy answer." }],
+                },
+              },
+            ],
+          };
+      };
+      const first = mountApp({
+        request,
+        registerCompanion: () => () => {},
+        path: entry === "deep link" ? `/conversations/${legacy.id}` : "",
+      });
+      await waitFor(() => {
+        expect(find(first, "controller").value).toBe(legacy.id);
+        expect(find(first, "voice-start").disabled).toBe(false);
+        expect(first.container.textContent).toContain("A saved legacy answer.");
+      });
+      draft(first, "Continue this saved Cat.");
+      click(first, "send");
+      await waitFor(() =>
+        expect(first.request).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: `/api/conversations/${legacy.id}/events`,
+            method: "POST",
+          }),
+        ),
+      );
+      expect(
+        first.request.mock.calls.some(
+          ([call]) =>
+            call.method === "PATCH" ||
+            (call.method === "POST" && call.path === "/api/conversations"),
+        ),
+      ).toBe(false);
+      first.cleanup();
+      const resumed = mountApp({ request, registerCompanion: () => () => {} });
+      await waitFor(() => {
+        expect(find(resumed, "controller").value).toBe(legacy.id);
+        expect(find(resumed, "voice-start").disabled).toBe(false);
+      });
+      expect(
+        resumed.request.mock.calls.some(([call]) => call.method === "POST"),
+      ).toBe(false);
+    },
+  );
+
   it("rejects an explicit regular-worker ID instead of silently switching the Cat", async () => {
     const app = mountApp({
       path: `/conversations/${worker.id}`,
@@ -470,7 +544,9 @@ describe("Insider Cat App", () => {
     expect(find(app, "draft").value).toBe(
       "Please explain the pending decision.",
     );
-    expect(app.container.textContent).toContain(worker.id);
+    expect(app.container.querySelector('[data-role="target"] span').title).toBe(
+      worker.id,
+    );
     click(app, "open-worker");
     expect(app.host.navigate).toHaveBeenCalledWith(
       `/conversations/${worker.id}`,
@@ -523,6 +599,10 @@ describe("Insider Cat App", () => {
     expect(
       create.body.agent_launch_additions.system_message_suffix_append,
     ).toContain("sibling of SmolPaws");
+    // Missing /server_info support does not block launch or invent a backend.
+    expect(
+      create.body.agent_launch_additions.system_message_suffix_append,
+    ).not.toContain("<RUNTIME_SERVICES>");
     expect(create.body.initial_message.content[0].text).toContain(worker.id);
     await waitFor(() => expect(find(app, "send").disabled).toBe(false));
     draft(app, "Continue the explanation.");
@@ -541,6 +621,52 @@ describe("Insider Cat App", () => {
           call.path === "/api/conversations" && call.method === "POST",
       ),
     ).toHaveLength(1);
+  });
+
+  it("adds only its owning backend's advertised runtime context without replacing the active profile", async () => {
+    const app = mountApp({
+      backendId: "backend-two",
+      request: ({ path }) => {
+        if (path === "/server_info")
+          return {
+            runtime_services: {
+              services: {
+                agent_server: {
+                  url_from_agent: "https://agent-two.internal:9443",
+                  auth_key_file_env_var: "OH_SESSION_API_KEY_PATH",
+                },
+              },
+              session_api_key: "test-secret-never-in-prompt",
+            },
+          };
+      },
+    });
+    await waitFor(() =>
+      expect(app.container.textContent).toContain(worker.title),
+    );
+    click(app, "select-worker");
+    draft(app, "Count the conversations here.");
+    click(app, "send");
+    await waitFor(() =>
+      expect(
+        app.request.mock.calls.some(
+          ([call]) =>
+            call.path === "/api/conversations" && call.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const { body } = app.request.mock.calls.find(
+      ([call]) => call.path === "/api/conversations" && call.method === "POST",
+    )[0];
+    expect(body.agent_profile_id).toBe("33333333-3333-4333-8333-333333333333");
+    expect(body).not.toHaveProperty("agent_settings");
+    expect(body).not.toHaveProperty("agent");
+    const suffix = body.agent_launch_additions.system_message_suffix_append;
+    expect(suffix).toContain("Agent Server: https://agent-two.internal:9443/");
+    expect(suffix).toContain("$OH_SESSION_API_KEY_PATH");
+    expect(suffix).toContain("Backend: backend-two");
+    expect(suffix).toContain("<INSIDER_CONTROLLER>");
+    expect(suffix).not.toMatch(/test-secret|localhost|127\.0\.0\.1/);
   });
 
   it("restores the durable controller and shows saved text without leaking selection across backends", async () => {

@@ -98,6 +98,7 @@ function setup(overrides = {}) {
     await session.start(controller, audio);
     peers.at(-1)?.channel.onopen?.();
     if (peers.at(-1)) {
+      peers.at(-1).channel.onmessage({data: JSON.stringify({type: "response.created", response: {id: "voice-response"}})});
       peers.at(-1).connectionState = "connected";
       peers.at(-1).onconnectionstatechange?.();
     }
@@ -125,10 +126,215 @@ const toolEvent = {
   type: "response.function_call_arguments.done",
   name: "send_to_insider",
   call_id: "tool-call-a",
+  response_id: "voice-response",
   arguments: JSON.stringify({ request: "Explain the current state." }),
 };
 
 describe("Insider voice lifecycle", () => {
+  it("starts Voice on the same legacy controller after checking its saved identity", async () => {
+    const legacy = { ...controller, tags: { smolpaws: "insider" } };
+    const app = setup({
+      request: ({ path }) =>
+        path === `/api/conversations/${legacy.id}` ? legacy : undefined,
+    });
+    await app.session.start(legacy, app.audio);
+    expect(app.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: `/api/conversations/${legacy.id}/voice/realtime`,
+        method: "POST",
+      }),
+    );
+    expect(app.session.getSnapshot()).toMatchObject({
+      controllerId: legacy.id,
+      error: null,
+    });
+    expect(microphone).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects function calls without a response owner even before interruption", async () => {
+    const app = setup();
+    await app.start();
+    app.emit({...toolEvent, response_id: undefined});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.request.mock.calls.some(([call]) => call.method === "POST" && call.path.endsWith("/events"))).toBe(false);
+    expect(app.sent().some(event => event.type === "response.create")).toBe(false);
+  });
+
+  it.each(["send_to_insider", "end_voice_call"])("ignores late %s function calls from a superseded response", async (name) => {
+    const app = setup();
+    await app.start();
+    app.emit({type: "response.created", response: {id: "old"}});
+    app.session.noteTypedInput();
+    app.emit({...toolEvent, name, response_id: "old", arguments: name === "end_voice_call" ? "{}" : toolEvent.arguments});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.request.mock.calls.some(([call]) => call.method === "POST" && call.path.endsWith("/events"))).toBe(false);
+    expect(track.stop).not.toHaveBeenCalled();
+    expect(app.sent().some(event => event.type === "response.create")).toBe(false);
+  });
+
+  it("allows one server-VAD reply for the current committed utterance, but not old audio", async () => {
+    const app = setup();
+    await app.start();
+    app.emit({type: "response.created", response: {id: "old"}});
+    app.emit({type: "input_audio_buffer.speech_started"});
+    app.emit({type: "input_audio_buffer.committed", item_id: "utterance-a"});
+    app.emit({type: "response.created", response: {id: "clarification"}});
+    app.emit({type: "output_audio_buffer.started", response_id: "old"});
+    expect(app.audio.muted).toBe(true);
+    app.emit({type: "output_audio_buffer.started", response_id: "clarification"});
+    expect(app.audio.muted).toBe(false);
+    expect(app.session.getSnapshot().status).toBe("speaking");
+    app.emit({type: "response.audio_transcript.done", response_id: "clarification", transcript: "Which project?"});
+    expect(app.session.getSnapshot().transcripts.assistant).toBe("Which project?");
+    app.emit({type: "response.created", response: {id: "unowned"}});
+    app.emit({type: "output_audio_buffer.stopped", response_id: "unowned"});
+    expect(app.session.getSnapshot().status).toBe("speaking");
+  });
+
+  it("clears server-response permission on typed input and call restart", async () => {
+    const app = setup();
+    await app.start();
+    app.emit({type: "input_audio_buffer.speech_started"});
+    app.emit({type: "input_audio_buffer.committed", item_id: "old-utterance"});
+    app.session.noteTypedInput();
+    app.emit({type: "response.created", response: {id: "late-ack"}});
+    app.emit({type: "output_audio_buffer.started", response_id: "late-ack"});
+    expect(app.audio.muted).toBe(true);
+    app.session.end();
+    await app.start();
+    app.session.interrupt();
+    app.emit({type: "response.created", response: {id: "late-from-old-call"}});
+    app.emit({type: "output_audio_buffer.started", response_id: "late-from-old-call"});
+    expect(app.audio.muted).toBe(true);
+  });
+
+  it("does not resend cancellation for every keystroke while an old tool is already fenced", async () => {
+    const app = setup();
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    app.session.noteTypedInput();
+    app.session.noteTypedInput();
+    app.session.noteTypedInput();
+    expect(app.sent().filter(event => event.type === "response.cancel")).toHaveLength(1);
+    app.setStatus("finished");
+    app.setEvents([{id: "new-old-answer", action: {kind: "FinishAction", message: "Old"}}]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = app.sent().find(event => event.item?.call_id === toolEvent.call_id);
+    expect(JSON.parse(result.item.output).status).toBe("superseded");
+  });
+
+  it("keeps interrupted OpenAI audio silent through late output and track callbacks", async () => {
+    const app = setup();
+    await app.start();
+    app.emit({type: "response.created", response: {id: "old"}});
+    app.emit({type: "output_audio_buffer.started", response_id: "old"});
+    app.session.interrupt();
+    app.audio.play.mockClear();
+    app.emit({type: "output_audio_buffer.started", response_id: "old"});
+    peers[0].ontrack({streams: [media]});
+    expect(app.audio.muted).toBe(true);
+    expect(app.audio.play).not.toHaveBeenCalled();
+    expect(app.session.getSnapshot().status).toBe("listening");
+  });
+
+  it("only resumes an interrupted OpenAI call for an answer from the current input", async () => {
+    const app = setup();
+    await app.start();
+    app.emit({type: "input_audio_buffer.speech_started"});
+    expect(app.sent().some(event => event.type === "response.cancel")).toBe(false);
+    app.emit({type: "input_audio_buffer.committed", item_id: "current"});
+    app.emit({type: "response.created", response: {id: "voice-response"}});
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    app.setStatus("finished");
+    app.setEvents([{id: "new", action: {kind: "FinishAction", message: "Fresh answer"}}]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const response = app.sent().find(event => event.type === "response.create").response;
+    expect(response.metadata).toHaveProperty("insider_input_epoch");
+    app.emit({type: "response.created", response: {id: "fresh", metadata: response.metadata}});
+    app.emit({type: "output_audio_buffer.started", response_id: "fresh"});
+    expect(app.audio.muted).toBe(false);
+    expect(app.session.getSnapshot().status).toBe("speaking");
+    app.emit({type: "output_audio_buffer.stopped", response_id: "old"});
+    expect(app.session.getSnapshot().status).toBe("speaking");
+  });
+
+  it("does not let a delayed response from an older epoch replace the current audio owner", async () => {
+    const app = setup();
+    await app.start();
+    app.session.noteTypedInput();
+    // Begin a new spoken request after the typed input fenced the old one.
+    app.emit({type: "input_audio_buffer.speech_started"});
+    app.emit({type: "input_audio_buffer.committed", item_id: "current"});
+    app.emit({type: "response.created", response: {id: "voice-response"}});
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    app.setStatus("finished");
+    app.setEvents([{id: "answer", action: {kind: "FinishAction", message: "Current"}}]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const metadata = app.sent().find(event => event.type === "response.create").response.metadata;
+    app.emit({type: "response.created", response: {id: "current", metadata}});
+    app.emit({type: "response.created", response: {id: "old", metadata: {insider_input_epoch: "0"}}});
+    app.emit({type: "output_audio_buffer.started", response_id: "old"});
+    expect(app.audio.muted).toBe(true);
+    app.emit({type: "output_audio_buffer.started", response_id: "current"});
+    expect(app.audio.muted).toBe(false);
+    app.session.noteTypedInput();
+    app.emit({type: "response.audio_transcript.done", transcript: "Stale without ID"});
+    expect(app.session.getSnapshot().transcripts.assistant).toBeUndefined();
+  });
+
+  it("typed input invalidates pending speech without submitting or canceling saved work", async () => {
+    const app = setup();
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    app.session.noteTypedInput();
+    app.setStatus("finished");
+    app.setEvents([{id: "new", action: {kind: "FinishAction", message: "Saved old answer"}}]);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(app.sent().some(event => event.type === "response.create")).toBe(false);
+    expect(app.sent().find(event => event.item?.call_id === toolEvent.call_id)).toBeTruthy();
+    expect(app.request.mock.calls.filter(([call]) => call.method === "POST" && call.path.endsWith("/events"))).toHaveLength(1);
+    expect(app.audio.muted).toBe(true);
+  });
+
+  it("does not treat a canceled OpenAI play attempt as a broken call", async () => {
+    const app = setup();
+    await app.start();
+    let reject;
+    app.audio.play.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    peers[0].ontrack({ streams: [media] });
+    app.session.interrupt();
+    reject(new Error("interrupted playback"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "listening",
+      error: null,
+    });
+    expect(app.sent()).toContainEqual({ type: "response.cancel" });
+    expect(track.stop).not.toHaveBeenCalled();
+  });
+
+  it("does not fail when automatic speech interruption aborts a pending play promise", async () => {
+    const app = setup();
+    await app.start();
+    let reject;
+    app.audio.play.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    peers[0].ontrack({ streams: [media] });
+    app.emit({ type: "input_audio_buffer.speech_started" });
+    reject(new DOMException("Playback interrupted by pause", "AbortError"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({ status: "listening", error: null });
+    expect(track.stop).not.toHaveBeenCalled();
+  });
+
   it("preserves OpenAI calls whose SDP response has no remote call ID", async () => {
     const app = setup({
       request: (call) =>
@@ -187,6 +393,7 @@ describe("Insider voice lifecycle", () => {
       type: "response.function_call_arguments.done",
       name: "end_voice_call",
       call_id: "end-tool",
+      response_id: "voice-response",
       arguments: "{}",
     });
     expect(track.stop).toHaveBeenCalledOnce();
@@ -294,9 +501,8 @@ describe("Insider voice lifecycle", () => {
     const answered = app
       .sent()
       .find((event) => event.item?.call_id === toolEvent.call_id);
-    expect(JSON.parse(answered.item.output).answer).toBe(
-      "The saved request finished.",
-    );
+    expect(JSON.parse(answered.item.output)).toMatchObject({ status: "superseded" });
+    expect(JSON.parse(answered.item.output)).not.toHaveProperty("answer");
   });
 
   it("does not let an ended call release a fresh call's saved-request lock", async () => {
@@ -754,6 +960,92 @@ function setupCodex(overrides = {}) {
 }
 
 describe("Codex server-owned voice relay", () => {
+  it("uses Codex barge-in only to suppress media, never to dispatch browser work", async () => {
+    const app = setupCodex();
+    await app.start();
+    app.emit({type: "input_audio_buffer.speech_started"});
+    app.emit(toolEvent);
+    app.emit({type: "output_audio_buffer.started", response_id: "unowned"});
+    expect(app.audio.muted).toBe(true);
+    expect(app.session.getSnapshot().speakerSuppressed).toBe(true);
+    expect(app.sent()).toEqual([]);
+    expect(app.request.mock.calls.filter(([call]) => call.method === "POST")).toHaveLength(1);
+  });
+
+  it("ignores a playback rejection from before local suppression", async () => {
+    const app = setupCodex();
+    await app.start();
+    let reject;
+    app.audio.play.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    peers[0].ontrack({ streams: [media] });
+    app.session.interrupt();
+    reject(new Error("interrupted playback"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "listening",
+      speakerSuppressed: true,
+      error: null,
+    });
+    expect(track.stop).not.toHaveBeenCalled();
+  });
+
+  it("suppresses Codex locally until explicit resume, including late media callbacks", async () => {
+    const app = setupCodex();
+    await app.start();
+    app.session.interrupt();
+    expect(app.audio.muted).toBe(true);
+    expect(app.session.getSnapshot().speakerSuppressed).toBe(true);
+    expect(app.audio.pause).toHaveBeenCalled();
+    peers[0].ontrack({ streams: [media] });
+    expect(app.audio.muted).toBe(true);
+    expect(app.audio.play).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(app.audio.muted).toBe(true);
+    expect(app.sent()).toEqual([]);
+    expect(track.enabled).toBe(true);
+    expect(track.stop).not.toHaveBeenCalled();
+    expect(
+      app.request.mock.calls.some(([call]) =>
+        /interrupt|pause|cancel/.test(call.path),
+      ),
+    ).toBe(false);
+    app.session.resumePlayback();
+    expect(app.audio.muted).toBe(false);
+    expect(app.audio.play).toHaveBeenCalledOnce();
+    expect(app.session.getSnapshot().speakerSuppressed).toBe(false);
+  });
+
+  it("clears local speaker suppression on a fresh call without unmuting the ended element", async () => {
+    const app = setupCodex();
+    await app.start();
+    app.session.interrupt();
+    app.session.end();
+    expect(app.audio.muted).toBe(true);
+    await app.start();
+    expect(app.audio.muted).toBe(false);
+    expect(app.session.getSnapshot().speakerSuppressed).toBe(false);
+  });
+
+  it("reports blocked explicit resume and closes the scoped call", async () => {
+    const app = setupCodex();
+    await app.start();
+    peers[0].ontrack({ streams: [media] });
+    app.session.interrupt();
+    app.audio.play.mockRejectedValueOnce(new Error("blocked"));
+    app.session.resumePlayback();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "error",
+      error: "voicePlaybackBlocked",
+    });
+    expect(track.stop).toHaveBeenCalledOnce();
+  });
+
   it("ignores a previous peer's delayed events after starting a fresh call", async () => {
     const app = setupCodex();
     await app.start();
@@ -877,6 +1169,7 @@ describe("Codex server-owned voice relay", () => {
     app.emit({
       type: "response.function_call_arguments.done",
       name: "end_voice_call",
+      response_id: "voice-response",
       arguments: "{}",
     });
     app.session.interrupt();
@@ -1038,7 +1331,63 @@ describe("Codex server-owned voice relay", () => {
     expect(app.session.getSnapshot()).toMatchObject({
       status: "error",
       provider: "codex",
-      error: "voiceCodexUnavailable",
+      error: "voiceConnectionFailed",
     });
+  });
+
+  it.each([
+    ["request_not_sent", "voiceRequestNotSent"],
+    ["relay_failed", "voiceRelayFailed"],
+    ["connection_failed", "voiceConnectionFailed"],
+    [undefined, "voiceConnectionFailed"],
+    ["unrecognized_provider_detail", "voiceConnectionFailed"],
+    ["constructor", "voiceConnectionFailed"],
+  ])("reports only the fixed message for call error code %s", async (code, error) => {
+    const app = setupCodex({
+      request: (call) =>
+        call.method === "GET" && call.path.endsWith("/codex_call_a")
+          ? {
+              provider: "codex",
+              status: "error",
+              error_code: code,
+              error: "Private backend detail must not reach the page",
+            }
+          : undefined,
+    });
+    await app.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot()).toMatchObject({
+      status: "error",
+      provider: "codex",
+      controllerId: controller.id,
+      error,
+    });
+    expect(JSON.stringify(app.session.getSnapshot())).not.toContain("Private backend");
+    expect(track.stop).toHaveBeenCalledOnce();
+    expect(peers[0].close).toHaveBeenCalledOnce();
+    expect(peers[0].channel.close).toHaveBeenCalledOnce();
+    expect(app.request).toHaveBeenCalledWith({
+      method: "DELETE",
+      path: "/api/conversations/controller-a/voice/realtime/codex_call_a",
+    });
+    const requests = app.request.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(app.request.mock.calls).toHaveLength(requests);
+  });
+
+  it("does not accept an error code from a different provider", async () => {
+    const app = setupCodex({
+      request: (call) =>
+        call.method === "GET" && call.path.endsWith("/codex_call_a")
+          ? {
+              provider: "openai",
+              status: "error",
+              error_code: "request_not_sent",
+            }
+          : undefined,
+    });
+    await app.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.session.getSnapshot().error).toBe("voiceConnectionFailed");
   });
 });
