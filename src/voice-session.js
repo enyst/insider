@@ -53,6 +53,10 @@ export function createVoiceSession({
   let releasePoll = null;
   let speechEpoch = 0;
   let playbackAttempt = 0;
+  let responseId = null;
+  let requireOwnedResponse = false;
+  let autoResponseEpoch = null;
+  let pendingToolEpoch = null;
   let pendingTool = false;
   let mediaConnected = false;
   let brokerStatus = "listening";
@@ -108,6 +112,10 @@ export function createVoiceSession({
     ++generation;
     ++speechEpoch;
     ++playbackAttempt;
+    responseId = null;
+    requireOwnedResponse = false;
+    autoResponseEpoch = null;
+    pendingToolEpoch = null;
     clearTimeout(connectionTimer);
     connectionTimer = null;
     clearTimeout(pollTimer);
@@ -163,23 +171,41 @@ export function createVoiceSession({
     publish({ speakerSuppressed: false });
     if (audio.srcObject) play(generation);
   }
-  function interrupt() {
+  function suppressPlayback(cancelResponse) {
     if (!audio) return;
     ++playbackAttempt;
-    if (snapshot.provider === "codex") {
-      // There is no Codex speech-cancel RPC. Keep playback suppressed until the
-      // user resumes it; a caption or poll cannot identify a fresh audio answer.
-      audio.muted = true;
-      audio.pause();
-      publish({ speakerSuppressed: true });
-      return;
-    }
     ++speechEpoch;
-    send({ type: "response.cancel" });
-    send({ type: "output_audio_buffer.clear" });
-    audio?.pause();
-    if (snapshot.status === "speaking")
-      publish({ status: pendingTool ? "thinking" : "listening" });
+    responseId = null;
+    requireOwnedResponse = true;
+    autoResponseEpoch = null;
+    audio.muted = true;
+    audio.pause();
+    if (cancelResponse && snapshot.provider === "openai") {
+      send({ type: "response.cancel" });
+      send({ type: "output_audio_buffer.clear" });
+    }
+    // Codex has no speech-cancel RPC or causal playback ID. Never infer a fresh
+    // answer from a caption/poll; its local audio needs explicit resumption.
+    publish({
+      speakerSuppressed: true,
+      ...(snapshot.status === "speaking"
+        ? { status: pendingTool ? "thinking" : "listening" }
+        : {}),
+    });
+  }
+  function interrupt() {
+    suppressPlayback(true);
+  }
+  function noteTypedInput() {
+    if (
+      snapshot.speakerSuppressed &&
+      requireOwnedResponse &&
+      !responseId &&
+      autoResponseEpoch === null &&
+      (!pendingTool || pendingToolEpoch !== speechEpoch)
+    )
+      return;
+    suppressPlayback(true);
   }
   function setMuted(muted) {
     stream?.getAudioTracks().forEach((track) => {
@@ -407,6 +433,7 @@ export function createVoiceSession({
       };
     } else {
       pendingTool = true;
+      pendingToolEpoch = epoch;
       // Speech status can change while this saved request is still running.
       // Expose its lifetime separately so typed input cannot race its result.
       publish({ status: "thinking", requestPending: true });
@@ -420,7 +447,10 @@ export function createVoiceSession({
             "The connection failed. Check the saved Cat conversation before retrying; the request might already have been accepted. Do not resend automatically.",
         };
       } finally {
-        if (active(version)) pendingTool = false;
+        if (active(version)) {
+          pendingTool = false;
+          pendingToolEpoch = null;
+        }
       }
     }
     if (!active(version) || output === null) return;
@@ -429,11 +459,26 @@ export function createVoiceSession({
       item: {
         type: "function_call_output",
         call_id: event.call_id,
-        output: JSON.stringify(output),
+        output: JSON.stringify(
+          epoch === speechEpoch
+            ? output
+            : {
+                status: "superseded",
+                conversation_id: id,
+                message:
+                  "Speech for this request was superseded. Inspect the saved Cat conversation for its result. Do not speak an old answer or resend the request.",
+              },
+        ),
       },
     });
     if (epoch === speechEpoch) {
-      send({ type: "response.create", response: { tool_choice: "none" } });
+      send({
+        type: "response.create",
+        response: {
+          tool_choice: "none",
+          metadata: { insider_input_epoch: String(epoch) },
+        },
+      });
     }
     publish({
       status: pendingTool ? "thinking" : "listening",
@@ -530,13 +575,34 @@ export function createVoiceSession({
         }
       };
       channel.onmessage = ({ data }) => {
-        // Codex owns its sideband, tools, and OpenHands dispatch on the server.
-        // Browser events must never submit a second copy of a spoken request.
-        if (!active(version) || provider !== "openai") return;
+        if (!active(version)) return;
         let event;
         try {
           event = JSON.parse(data);
         } catch {
+          return;
+        }
+        // Codex owns all dispatch. Only its media interruption signal is handled
+        // here; transcripts and tools must never submit a second saved request.
+        if (provider === "codex") {
+          if (event.type === "input_audio_buffer.speech_started")
+            suppressPlayback(false);
+          return;
+        }
+        if (event.type === "input_audio_buffer.committed") {
+          autoResponseEpoch = speechEpoch;
+          return;
+        }
+        if (event.type === "response.created") {
+          const response = event.response;
+          const taggedEpoch = response?.metadata?.insider_input_epoch;
+          const owned =
+            taggedEpoch === String(speechEpoch) ||
+            (taggedEpoch == null && autoResponseEpoch === speechEpoch);
+          if (response?.id && (owned || !requireOwnedResponse)) {
+            responseId = response.id;
+            if (owned) autoResponseEpoch = null;
+          }
           return;
         }
         if (
@@ -546,24 +612,41 @@ export function createVoiceSession({
         else if (
           event.type === "response.output_audio_transcript.done" ||
           event.type === "response.audio_transcript.done"
-        )
-          transcript("assistant", event.transcript);
-        else if (event.type === "response.function_call_arguments.done")
+        ) {
+          if (
+            !requireOwnedResponse ||
+            (responseId && event.response_id === responseId)
+          )
+            transcript("assistant", event.transcript);
+        } else if (event.type === "response.function_call_arguments.done") {
+          if (!event.response_id || event.response_id !== responseId) return;
           void toolCall(event, id, version);
-        else if (event.type === "input_audio_buffer.speech_started") {
-          ++playbackAttempt;
-          ++speechEpoch;
-          audio?.pause();
+        } else if (event.type === "input_audio_buffer.speech_started") {
+          suppressPlayback(false);
           publish({ status: pendingTool ? "thinking" : "listening" });
         } else if (event.type === "output_audio_buffer.started") {
+          if (
+            requireOwnedResponse &&
+            (!responseId || event.response_id !== responseId)
+          )
+            return;
+          if (requireOwnedResponse && audio) {
+            audio.muted = false;
+            publish({ speakerSuppressed: false });
+          }
           play(version);
           publish({ status: "speaking" });
         } else if (
           event.type === "output_audio_buffer.stopped" ||
           event.type === "output_audio_buffer.cleared"
-        )
+        ) {
+          if (
+            requireOwnedResponse &&
+            (!responseId || event.response_id !== responseId)
+          )
+            return;
           publish({ status: pendingTool ? "thinking" : "listening" });
-        else if (
+        } else if (
           event.type === "error" &&
           event.error?.code !== "response_cancel_not_active"
         )
@@ -613,6 +696,7 @@ export function createVoiceSession({
     end,
     interrupt,
     resumePlayback,
+    noteTypedInput,
     setMuted,
     getSnapshot: () => snapshot,
   };

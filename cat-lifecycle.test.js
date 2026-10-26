@@ -34,6 +34,7 @@ vi.mock("./src/voice-session.js", () => ({
     });
     return {
       getSnapshot: () => mocked.snapshot,
+      noteTypedInput: vi.fn(),
       start: mocked.start,
       end: mocked.end,
       setMuted: mocked.setMuted,

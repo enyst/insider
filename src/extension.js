@@ -915,6 +915,7 @@ export function activate(host) {
         }
         action("draft").addEventListener("input", () => {
           state.draft = action("draft").value;
+          if (state.draft.trim()) voice.noteTypedInput();
         });
         action("draft").addEventListener("keydown", (event) => {
           if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {

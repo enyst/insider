@@ -265,6 +265,15 @@ saved Cat history. **Mute**, **Unmute**, and **End call** work with both provide
 silences local playback until you select **Resume audio**. Codex's current
 app-server API cannot cancel speech, so resuming may make ongoing speech audible;
 it does not request a new answer. The microphone stays in its current state.
+Typing or a speech-start event from the transport suppresses old playback.
+OpenAI resumes automatically for a reply tagged with the current input
+generation, or one server-VAD reply after the current spoken input commits.
+Old output events cannot restart it. Once suppressed, Codex remains silent
+until **Resume audio**, because its pinned protocol does not identify which
+queued speech belongs to which input. Codex captions and polling alone do not
+prove that local audio was interrupted.
+Superseded OpenAI tool results stay in the saved Cat conversation; Voice receives
+a superseded notice instead of the old answer.
 Ending a call or interrupting speech does not cancel accepted agent work.
 Changing Cat, starting a new Cat, changing backend, disabling the App, or ending
 the call releases the microphone and closes the connection. Returning to the
