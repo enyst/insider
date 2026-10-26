@@ -129,6 +129,26 @@ const toolEvent = {
 };
 
 describe("Insider voice lifecycle", () => {
+  it("starts Voice on the same legacy controller after checking its saved identity", async () => {
+    const legacy = { ...controller, tags: { smolpaws: "insider" } };
+    const app = setup({
+      request: ({ path }) =>
+        path === `/api/conversations/${legacy.id}` ? legacy : undefined,
+    });
+    await app.session.start(legacy, app.audio);
+    expect(app.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: `/api/conversations/${legacy.id}/voice/realtime`,
+        method: "POST",
+      }),
+    );
+    expect(app.session.getSnapshot()).toMatchObject({
+      controllerId: legacy.id,
+      error: null,
+    });
+    expect(microphone).toHaveBeenCalledTimes(1);
+  });
+
   it("does not treat a canceled OpenAI play attempt as a broken call", async () => {
     const app = setup();
     await app.start();

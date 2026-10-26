@@ -94,6 +94,7 @@ function mountApp(overrides = {}) {
       mount = factory;
       return vi.fn();
     }),
+    registerCompanion: overrides.registerCompanion,
     navigate: vi.fn(),
     agentServer: { request },
   };
@@ -248,7 +249,7 @@ describe("Insider Cat App", () => {
     ).toBe(false);
   });
 
-  it("resumes an explicit Insider controller while excluding incomplete tags, children, and other roles", async () => {
+  it("resumes an explicit Insider controller while excluding unmarked conversations, children, and other roles", async () => {
     const app = mountApp({
       request: ({ path }) => {
         if (path.startsWith("/api/conversations/search"))
@@ -257,8 +258,8 @@ describe("Insider Cat App", () => {
               controller,
               {
                 ...controller,
-                id: "missing-role",
-                tags: { smolpaws: "insider" },
+                id: "missing-cat-tag",
+                tags: { insiderrole: "controller" },
               },
               {
                 ...controller,
@@ -422,6 +423,79 @@ describe("Insider Cat App", () => {
       resumed.request.mock.calls.some(([call]) => call.method === "POST"),
     ).toBe(false);
   });
+
+  it.each(["discovery", "deep link"])(
+    "continues a legacy Cat through %s and resumes it without replacing its identity",
+    async (entry) => {
+      const legacy = {
+        ...controller,
+        id: "55555555-5555-4555-8555-555555555555",
+        title: "Legacy Cat",
+        tags: { smolpaws: "insider" },
+      };
+      const request = ({ path }) => {
+        if (path.includes("page_id=legacy-page"))
+          return { items: [legacy], next_page_id: null };
+        if (path.startsWith("/api/conversations/search"))
+          return {
+            items: entry === "deep link" ? [worker, controller] : [worker],
+            next_page_id: "legacy-page",
+          };
+        if (path === `/api/conversations/${legacy.id}`) return legacy;
+        if (
+          path ===
+          `/api/conversations/${legacy.id}/events/search?limit=50&sort_order=TIMESTAMP_DESC`
+        )
+          return {
+            items: [
+              {
+                id: "legacy-answer",
+                llm_message: {
+                  role: "assistant",
+                  content: [{ type: "text", text: "A saved legacy answer." }],
+                },
+              },
+            ],
+          };
+      };
+      const first = mountApp({
+        request,
+        registerCompanion: () => () => {},
+        path: entry === "deep link" ? `/conversations/${legacy.id}` : "",
+      });
+      await waitFor(() => {
+        expect(find(first, "controller").value).toBe(legacy.id);
+        expect(find(first, "voice-start").disabled).toBe(false);
+        expect(first.container.textContent).toContain("A saved legacy answer.");
+      });
+      draft(first, "Continue this saved Cat.");
+      click(first, "send");
+      await waitFor(() =>
+        expect(first.request).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: `/api/conversations/${legacy.id}/events`,
+            method: "POST",
+          }),
+        ),
+      );
+      expect(
+        first.request.mock.calls.some(
+          ([call]) =>
+            call.method === "PATCH" ||
+            (call.method === "POST" && call.path === "/api/conversations"),
+        ),
+      ).toBe(false);
+      first.cleanup();
+      const resumed = mountApp({ request, registerCompanion: () => () => {} });
+      await waitFor(() => {
+        expect(find(resumed, "controller").value).toBe(legacy.id);
+        expect(find(resumed, "voice-start").disabled).toBe(false);
+      });
+      expect(
+        resumed.request.mock.calls.some(([call]) => call.method === "POST"),
+      ).toBe(false);
+    },
+  );
 
   it("rejects an explicit regular-worker ID instead of silently switching the Cat", async () => {
     const app = mountApp({

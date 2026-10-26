@@ -50,8 +50,10 @@ dependencies or run a build.
   The App remembers the last chosen controller for its backend and organization,
   then verifies its Insider tags when loading it again. `/new` prepares a fresh
   Cat without sending that command to the previous conversation. Controllers
-  must be top-level conversations with both `smolpaws: insider` and
-  `insiderrole: controller` tags.
+  must be top-level conversations tagged `smolpaws: insider`, with
+  `insiderrole: controller` or no role tag for older Cats. Legacy Cats keep
+  their saved identity when resumed, including for Voice. Children and
+  explicit other roles are excluded. New Cats receive both controller tags.
 - Create the controller using the active **OpenHands agent profile** and its
   workspace, preserving the user's confirmation policy and security settings.
   The [Insider skill](skills/insider-cat/SKILL.md) is embedded in its launch

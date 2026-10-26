@@ -6,7 +6,8 @@ export const CONTROLLER_TAGS = {
 export const isController = (conversation) =>
   conversation?.tags?.smolpaws === CONTROLLER_TAGS.smolpaws &&
   !conversation.parent_conversation_id &&
-  conversation.tags.insiderrole === CONTROLLER_TAGS.insiderrole;
+  (conversation.tags.insiderrole === undefined ||
+    conversation.tags.insiderrole === CONTROLLER_TAGS.insiderrole);
 
 /** Hide only our own transport envelope; the saved user event remains intact. */
 export function userMessageForDisplay(text) {

@@ -5,8 +5,8 @@ import {
 } from "./src/insider-controller.js";
 
 describe("Insider conversation identity and display", () => {
-  it("requires the explicit Insider controller identity on a top-level conversation", () => {
-    expect(isController({ tags: { smolpaws: "insider" } })).toBe(false);
+  it("accepts current and legacy top-level Insider controllers", () => {
+    expect(isController({ tags: { smolpaws: "insider" } })).toBe(true);
     expect(isController({ tags: { insiderrole: "controller" } })).toBe(false);
     expect(
       isController({
@@ -22,6 +22,16 @@ describe("Insider conversation identity and display", () => {
     expect(
       isController({ tags: { smolpaws: "insider", insiderrole: "worker" } }),
     ).toBe(false);
+    expect(
+      isController({ tags: { smolpaws: "insider", insiderrole: "unknown" } }),
+    ).toBe(false);
+    expect(
+      isController({
+        parent_conversation_id: "parent",
+        tags: { smolpaws: "insider" },
+      }),
+    ).toBe(false);
+    expect(isController({ tags: {} })).toBe(false);
   });
 
   it.each(["Canvas context", "Canvas voice context"])(
