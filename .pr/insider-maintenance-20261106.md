@@ -2,8 +2,9 @@
 
 The draft starts at `bf99051b0c8293c324091c47bac5df3b3d16d45b` and already
 contains the fetched App `main` at
-`521362c2f19ac840f0dec971da353b08e6c90792`. No App merge or runtime behavior
-change was needed. The paired Canvas and Agent Server PRs contain their own
+`521362c2f19ac840f0dec971da353b08e6c90792`. No App merge was needed. Review of
+the paired current-main integrations found a runtime/workspace compatibility
+issue, fixed below. The paired Canvas and Agent Server PRs contain their own
 current-main merges and verification.
 
 ## Findings and changes
@@ -15,6 +16,23 @@ current-main merges and verification.
 - The locked development toolchain had five npm audit findings: three high and
   two moderate package findings. The runtime dependencies were unaffected.
   Compatible patched versions resolve all five findings.
+- On a mixed local/Docker backend, selecting a Docker worker reused its
+  container-visible `/workspace` for a new Cat. The create request omitted
+  `conversation_runtime`, so the backend default could run that Cat on the host
+  or in a new container. New Cats now explicitly select the local runtime when
+  available and offer only saved host workspaces on mixed backends. The worker
+  remains selected context, and the Cat remains a top-level OpenHands
+  conversation. Creation fails before submission when runtime verification is
+  unavailable, the backend is Docker-only, or the host workspace cannot be
+  verified. Drafts survive and the user can refresh and retry.
+
+The previous local-only contract remains supported: SDK
+[`4de903b`'s server metadata](https://github.com/OpenHands/software-agent-sdk/blob/4de903b0208142e7bc3c1c3862abe624ec9339c9/openhands-agent-server/openhands/agent_server/server_details_router.py#L64)
+already advertised `conversation_runtime: local`, without a selectable-runtime
+list. Such backends keep conversation-workspace reuse and receive no new runtime
+field. Current SDK's empty list likewise means only the configured runtime.
+Missing service-address metadata still omits the optional prompt suffix; it is
+distinct from runtime metadata required to safely create a new Cat.
 
 | Dependency | Before | After | Patched release published (UTC) |
 | --- | --- | --- | --- |
@@ -41,9 +59,17 @@ On Node 24.22.1 and npm 11.19.1:
 - Baseline: all 150 tests in ten files passed; rebuilding reproduced
   `extension.js` unchanged.
 - After the fixes, a fresh `npm ci` passed and reported zero vulnerabilities.
-- `npm test`: all 150 tests in ten files passed with Vitest 4.1.12.
-- `npm run build`: succeeded; `git diff --exit-code -- extension.js` passed.
-  The installed browser bundle is byte-for-byte unchanged.
+- Four new consumer regressions failed against the previous bundle, then passed
+  after the fix: mixed backends with either default runtime do not copy a
+  container workspace and create a host-local Cat without losing worker context;
+  unavailable/Docker-only runtimes refuse creation and recover without losing
+  the draft. These use simulated backends, not a Docker runtime deployment.
+- A fifth new regression verifies that a host workspace removed between
+  selection and send is refused before creation, preserving the draft and worker.
+- `npm test`: all 155 tests in ten files passed with Vitest 4.1.12.
+- `npm run build`: succeeded. The committed entrypoint is rebuilt for this
+  behavior change; its build-reproduction test passes. The earlier dependency
+  update alone preserved the bundle byte-for-byte.
 - `git diff --check`: passed.
 - The refreshed Canvas host API v1 still supplies the App's page, companion,
   request, navigation, and pre-compaction contracts. The refreshed SDK still

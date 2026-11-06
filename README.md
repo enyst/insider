@@ -65,6 +65,13 @@ dependencies or run a build.
   workspace, preserving the user's confirmation policy and security settings.
   The [Insider skill](skills/insider-cat/SKILL.md) is embedded in its launch
   instructions without changing the stored profile.
+- New Cats run on the Agent Server host. On a backend offering both local and
+  Docker runtimes, choose a saved host workspace for the Cat; add one in Canvas
+  and refresh if needed. Selecting a Docker worker keeps its ID and context but
+  does not copy its container's `/workspace` into the Cat's workspace. The App
+  explicitly selects the local runtime. Docker-only backends cannot create a
+  new Cat; if runtime verification fails, check the backend, refresh, and retry.
+  The draft stays intact. Existing Cat selection and Voice resume are unchanged.
 - Continue the controller through the normal conversation API. Messages and
   replies are saved on Agent Server. The panel displays text from the latest 50
   events and links to the full conversation for older history, tools, and
@@ -141,8 +148,9 @@ New Cats inherit advertised `runtime_services` from their owning backend's
 `/server_info`. Agent-side URLs and authentication environment-variable names
 are added to the launch context; credential values are never copied. The host
 must advertise its actual services and provide the referenced environment or
-key file to the agent. Missing metadata does not prevent launching a Cat, but
-the agent must establish the connection before claiming backend access.
+key file to the agent. Missing service-address metadata does not prevent
+launching a Cat, but the agent must establish the connection before claiming
+backend access.
 
 Both voice transports instruct the realtime model to delegate every new request,
 including greetings and recall. A spoken acknowledgment alone does not establish
@@ -298,8 +306,11 @@ limits. Browser transport measurements do not prove acoustic speaker output.
 
 Maintenance verification, **6 November 2026**: fetched App `main` remains
 `521362c2f19ac840f0dec971da353b08e6c90792`, already included in the draft, so no
-merge was required. All **150 tests across 10 files** passed on Node 24.22.1, and
-`npm run build` reproduced the prepared `extension.js` unchanged. Updated the
+merge was required. Reviewing the refreshed integration found that a Docker
+worker's workspace could be reused on the host. New-Cat creation now verifies
+its runtime and uses explicit host-workspace selection on mixed backends.
+All **155 tests across 10 files** passed on Node 24.22.1; the prepared
+`extension.js` was rebuilt and its source-reproduction check passed. Updated the
 Vite/Vitest development tools and vulnerable transitive dependencies to patched
 versions published more than seven days before this check; `npm audit` reports
 zero vulnerabilities. The paired Canvas and Agent Server PRs record their own

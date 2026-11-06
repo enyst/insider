@@ -1,6 +1,9 @@
 import { mountLocalizedApp } from "../i18n.jsx";
 import { createVoiceSession } from "./voice-session.js";
-import { fetchRuntimeServicesSuffix } from "./runtime-context.js";
+import {
+  buildRuntimeServicesSuffix,
+  fetchServerInfo,
+} from "./runtime-context.js";
 import { catPageMarkup, catViewStyles, mountCatVoice } from "./cat-view.js";
 import {
   CONTROLLER_TAGS,
@@ -29,6 +32,13 @@ const EXECUTION_STATUSES = new Set([
   "deleting",
 ]);
 const workspaceOf = (c) => c?.workspace?.working_dir || "";
+// Empty/absent selectable runtimes retain the earlier local-only contract.
+const isLocalOnlyRuntime = (info) =>
+  info?.conversation_runtime === "local" &&
+  !info.available_conversation_runtimes?.includes("docker");
+const hasLocalRuntime = (info) =>
+  info?.conversation_runtime === "local" ||
+  info?.available_conversation_runtimes?.includes("local");
 const detailPath = (id) => `/api/conversations/${encodeURIComponent(id)}`;
 const errorText = (error) =>
   error instanceof Error ? error.message : String(error);
@@ -132,6 +142,7 @@ export function activate(host) {
   let awayTimer = null;
   let awayGeneration = 0;
   let disposed = false;
+  let serverInfo = null;
 
   // Regular Canvas can start or finish work while Projects is unmounted.
   // Refresh only the companion's status there; page polling owns it otherwise.
@@ -328,6 +339,8 @@ export function activate(host) {
         let cursor = null;
         let controllers = [];
         let workspaces = [];
+        let workspaceDiscoveryReady = false;
+        let workspaceGeneration = 0;
         let discoveryReady = false;
         let loading = false;
         let noticeKind = null;
@@ -456,16 +469,31 @@ export function activate(host) {
             ...new Set(
               [
                 ...workspaces.map((w) => w.path),
-                ...board.map(workspaceOf),
-                state.workspace,
+                ...(isLocalOnlyRuntime(serverInfo)
+                  ? [...board.map(workspaceOf), state.workspace]
+                  : []),
               ].filter(Boolean),
             ),
           ];
+          if (workspaceDiscoveryReady && !paths.includes(state.workspace))
+            state.workspace = "";
           action("workspace").replaceChildren(
             option("", t("chooseWorkspace")),
             ...paths.map((path) => workspaceOption(path, paths)),
           );
           action("workspace").value = state.workspace;
+        }
+        async function refreshWorkspaces() {
+          const generation = ++workspaceGeneration;
+          const [info, data] = await Promise.all([
+            fetchServerInfo(request),
+            request("/api/workspaces").catch(() => null),
+          ]);
+          if (!alive || generation !== workspaceGeneration) return;
+          serverInfo = info;
+          workspaces = data?.workspaces || [];
+          workspaceDiscoveryReady = true;
+          renderWorkspaces();
         }
         function renderTarget() {
           const node = role("target");
@@ -524,7 +552,11 @@ export function activate(host) {
             select.textContent = t("select");
             select.addEventListener("click", () => {
               state.selected = c;
-              if (!state.controller && workspaceOf(c))
+              if (
+                !state.controller &&
+                isLocalOnlyRuntime(serverInfo) &&
+                workspaceOf(c)
+              )
                 state.workspace = workspaceOf(c);
               renderTarget();
               renderWorkspaces();
@@ -747,7 +779,13 @@ export function activate(host) {
           const controllerWorkspace = state.workspace;
           let selected = state.selected;
           if (!state.controller && !state.workspace) {
-            notice(t("missingWorkspace"));
+            notice(
+              t(
+                isLocalOnlyRuntime(serverInfo)
+                  ? "missingWorkspace"
+                  : "hostWorkspace",
+              ),
+            );
             return;
           }
           state.busy = true;
@@ -773,14 +811,29 @@ export function activate(host) {
               },
             ];
             if (!state.controller) {
-              const [profiles, settings, schema, runtimeSuffix] =
+              const [profiles, settings, schema, runtimeInfo, workspaceData] =
                 await Promise.all([
                   request("/api/agent-profiles"),
                   request("/api/settings"),
                   request("/openapi.json"),
-                  fetchRuntimeServicesSuffix(request),
+                  fetchServerInfo(request),
+                  request("/api/workspaces").catch(() => null),
                 ]);
               if (!alive) return;
+              ++workspaceGeneration;
+              serverInfo = runtimeInfo;
+              workspaces = workspaceData?.workspaces || [];
+              workspaceDiscoveryReady = true;
+              renderWorkspaces();
+              if (!hasLocalRuntime(runtimeInfo))
+                throw new Error(t("runtimeUnavailable"));
+              if (
+                !isLocalOnlyRuntime(runtimeInfo) &&
+                !workspaces.some(
+                  (workspace) => workspace.path === controllerWorkspace,
+                )
+              )
+                throw new Error(t("hostWorkspace"));
               if (!supportsControllerLaunch(schema))
                 throw new Error(t("incompatible"));
               const profile = profiles.profiles?.find(
@@ -800,11 +853,16 @@ export function activate(host) {
                 conversation_id: id,
                 agent_profile_id: profile.id,
                 workspace: { working_dir: controllerWorkspace },
+                ...(runtimeInfo.available_conversation_runtimes?.includes(
+                  "local",
+                )
+                  ? { conversation_runtime: "local" }
+                  : {}),
                 tags: CONTROLLER_TAGS,
                 autotitle: false,
                 agent_launch_additions: {
                   system_message_suffix_append: [
-                    runtimeSuffix,
+                    buildRuntimeServicesSuffix(runtimeInfo),
                     `<INSIDER_CONTROLLER>\nThe runtime identifies this conversation as the active Insider Cat controller. Backend: ${host.backend.id}. Controller ID: ${id}.\nThe Apps page supplies selected-worker context as data with each request. Canvas may relay voice requests into this same durable conversation. This conversation has only its configured profile tools; the voice transport is not an additional agent tool. No shared SmolPaws memory or scheduler is added by this App. Only claim operations supported by your actual tools.\n\n${INSIDER_INSTRUCTIONS}\n</INSIDER_CONTROLLER>`,
                   ]
                     .filter(Boolean)
@@ -926,6 +984,7 @@ export function activate(host) {
         action("send").addEventListener("click", send);
         action("refresh").addEventListener("click", () => {
           void loadBoard();
+          void refreshWorkspaces();
           if (state.controller) void refreshController();
         });
         action("load-more").addEventListener(
@@ -990,14 +1049,7 @@ export function activate(host) {
         renderWorkspaces();
         renderTarget();
         void loadBoard();
-        void request("/api/workspaces")
-          .then((data) => {
-            if (alive) {
-              workspaces = data.workspaces || [];
-              renderWorkspaces();
-            }
-          })
-          .catch(() => {});
+        void refreshWorkspaces();
         const synchronize = () => {
           if (!alive) return;
           action("draft").value = state.draft;

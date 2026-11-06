@@ -78,20 +78,18 @@ export function buildRuntimeServicesSuffix(serverInfo) {
   ].join("\n");
 }
 
-/** Optional metadata must not prevent launching a Cat on a valid backend. */
-export async function fetchRuntimeServicesSuffix(request) {
+/** Bound runtime discovery; callers decide whether missing metadata is safe. */
+export async function fetchServerInfo(request) {
   let timer;
   try {
     return await Promise.race([
-      Promise.resolve()
-        .then(() => request("/server_info"))
-        .then(buildRuntimeServicesSuffix),
+      Promise.resolve().then(() => request("/server_info")),
       new Promise((resolve) => {
-        timer = setTimeout(() => resolve(""), METADATA_TIMEOUT_MS);
+        timer = setTimeout(() => resolve(null), METADATA_TIMEOUT_MS);
       }),
     ]);
   } catch {
-    return "";
+    return null;
   } finally {
     clearTimeout(timer);
   }

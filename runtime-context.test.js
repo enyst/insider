@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildRuntimeServicesSuffix,
-  fetchRuntimeServicesSuffix,
+  fetchServerInfo,
 } from "./src/runtime-context.js";
 
 const metadata = {
@@ -96,25 +96,27 @@ describe("backend-advertised runtime context", () => {
 
   it("fetches through the caller's bound backend and tolerates unavailable metadata", async () => {
     const request = vi.fn().mockResolvedValue({ runtime_services: metadata });
-    expect(await fetchRuntimeServicesSuffix(request)).toContain(":19000/");
+    expect(await fetchServerInfo(request)).toEqual({
+      runtime_services: metadata,
+    });
     expect(request).toHaveBeenCalledExactlyOnceWith("/server_info");
     request.mockRejectedValue(new Error("Metadata unavailable"));
-    expect(await fetchRuntimeServicesSuffix(request)).toBe("");
+    expect(await fetchServerInfo(request)).toBeNull();
   });
 
-  it("does not hold a valid launch indefinitely or replace context with a late result", async () => {
+  it("bounds runtime verification and ignores a late result", async () => {
     vi.useFakeTimers();
     let resolveMetadata;
-    const pending = fetchRuntimeServicesSuffix(
+    const pending = fetchServerInfo(
       () =>
         new Promise((resolve) => {
           resolveMetadata = resolve;
         }),
     );
     await vi.advanceTimersByTimeAsync(3000);
-    expect(await pending).toBe("");
+    expect(await pending).toBeNull();
     resolveMetadata({ runtime_services: metadata });
     await Promise.resolve();
-    expect(await pending).toBe("");
+    expect(await pending).toBeNull();
   });
 });

@@ -1528,5 +1528,39 @@
     "uk": "Голосовий режим не зміг завершити цей запит. Відкрийте чат, перш ніж спробувати знову.",
     "zh-CN": "语音未能完成此请求。请先打开聊天查看，再重试。",
     "zh-TW": "語音未能完成此請求。請先開啟聊天查看，再重試。"
+  },
+  "INSIDER_CAT$HOST_WORKSPACE": {
+    "en": "Choose a saved host workspace in Canvas, then refresh. Selected work stays in context.",
+    "ar": "اختر مساحة عمل محفوظة على المضيف في Canvas، ثم حدّث الصفحة. يبقى العمل المحدد في السياق.",
+    "ca": "Tria un espai de treball desat a l’amfitrió a Canvas i actualitza. El treball seleccionat es manté en el context.",
+    "de": "Wähle in Canvas einen gespeicherten Arbeitsbereich auf dem Host und aktualisiere. Die ausgewählte Arbeit bleibt im Kontext.",
+    "es": "Elige un espacio de trabajo guardado en el host en Canvas y actualiza. El trabajo seleccionado permanece en el contexto.",
+    "fr": "Choisissez un espace de travail enregistré sur l’hôte dans Canvas, puis actualisez. Le travail sélectionné reste dans le contexte.",
+    "it": "Scegli in Canvas uno spazio di lavoro salvato sull’host, poi aggiorna. Il lavoro selezionato resta nel contesto.",
+    "ja": "Canvas でホスト上の保存済みワークスペースを選び、更新してください。選択した作業はコンテキストに残ります。",
+    "ko-KR": "Canvas에서 호스트에 저장된 작업 공간을 선택한 후 새로고침하세요. 선택한 작업은 맥락에 유지됩니다.",
+    "no": "Velg et lagret arbeidsområde på verten i Canvas, og oppdater. Valgt arbeid beholdes i konteksten.",
+    "pt": "Escolha no Canvas um espaço de trabalho salvo no host e atualize. O trabalho selecionado permanece no contexto.",
+    "tr": "Canvas’ta ana makinede kayıtlı bir çalışma alanı seçip yenileyin. Seçili çalışma bağlamda kalır.",
+    "uk": "Виберіть у Canvas збережений робочий простір на хості та оновіть. Вибрана робота залишається в контексті.",
+    "zh-CN": "在 Canvas 中选择主机上已保存的工作区，然后刷新。选中的工作仍保留在上下文中。",
+    "zh-TW": "在 Canvas 中選擇主機上已儲存的工作區，然後重新整理。選取的工作仍保留在上下文中。"
+  },
+  "INSIDER_CAT$RUNTIME_UNAVAILABLE": {
+    "en": "Could not verify a host-local runtime. New Cats need a backend with a local runtime. Check the backend, then refresh and try again.",
+    "ar": "تعذر التحقق من بيئة تشغيل محلية على المضيف. تحتاج القطط الجديدة إلى خادم ببيئة تشغيل محلية. تحقق من الخادم ثم حدّث وحاول مجددًا.",
+    "ca": "No s’ha pogut verificar un entorn local a l’amfitrió. Els Cats nous necessiten un servidor amb un entorn local. Comprova el servidor, actualitza i torna-ho a provar.",
+    "de": "Eine lokale Laufzeit auf dem Host konnte nicht bestätigt werden. Neue Cats benötigen ein Backend mit lokaler Laufzeit. Prüfe das Backend, aktualisiere und versuche es erneut.",
+    "es": "No se pudo verificar un entorno local en el host. Los nuevos Cats necesitan un servidor con entorno local. Revisa el servidor, actualiza e inténtalo de nuevo.",
+    "fr": "Impossible de vérifier un environnement local sur l’hôte. Les nouveaux Cats nécessitent un serveur avec un environnement local. Vérifiez le serveur, actualisez et réessayez.",
+    "it": "Impossibile verificare un ambiente locale sull’host. I nuovi Cat richiedono un backend con un ambiente locale. Controlla il backend, aggiorna e riprova.",
+    "ja": "ホストのローカル実行環境を確認できませんでした。新しい Cat にはローカル実行環境のあるバックエンドが必要です。バックエンドを確認して更新し、再試行してください。",
+    "ko-KR": "호스트의 로컬 실행 환경을 확인하지 못했습니다. 새 Cat에는 로컬 실행 환경을 갖춘 백엔드가 필요합니다. 백엔드를 확인한 후 새로고침하고 다시 시도하세요.",
+    "no": "Kunne ikke bekrefte et lokalt kjøremiljø på verten. Nye Cats trenger en backend med lokalt kjøremiljø. Kontroller backenden, oppdater og prøv igjen.",
+    "pt": "Não foi possível verificar um ambiente local no host. Novos Cats precisam de um backend com ambiente local. Verifique o backend, atualize e tente novamente.",
+    "tr": "Ana makinede yerel çalışma ortamı doğrulanamadı. Yeni Cat’ler yerel çalışma ortamı olan bir arka uç gerektirir. Arka ucu kontrol edip yenileyin ve tekrar deneyin.",
+    "uk": "Не вдалося перевірити локальне середовище на хості. Новим Cat потрібен сервер із локальним середовищем. Перевірте сервер, оновіть і спробуйте ще раз.",
+    "zh-CN": "无法验证主机本地运行环境。新 Cat 需要具有本地运行环境的后端。请检查后端，刷新后重试。",
+    "zh-TW": "無法確認主機本機執行環境。新的 Cat 需要具備本機執行環境的後端。請檢查後端，重新整理後再試。"
   }
 }

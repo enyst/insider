@@ -71,6 +71,7 @@ function mountApp(overrides = {}) {
       };
     }
     if (path === "/api/workspaces") return { workspaces: [] };
+    if (path === "/server_info") return { conversation_runtime: "local" };
     if (path === "/api/conversations" && method === "POST")
       return { ...controller, id: body.conversation_id };
     if (path.includes("/events/search"))
@@ -136,6 +137,157 @@ afterEach(() => {
 });
 
 describe("Insider Cat App", () => {
+  it.each(["local", "docker"])(
+    "keeps a Cat on the host when a mixed backend defaults to %s",
+    async (conversation_runtime) => {
+      const containerWorker = {
+        ...worker,
+        workspace: { working_dir: "/workspace" },
+      };
+      const app = mountApp({
+        request: ({ path }) => {
+          if (path === "/server_info")
+            return {
+              conversation_runtime,
+              available_conversation_runtimes: ["local", "docker"],
+            };
+          if (path === "/api/workspaces")
+            return { workspaces: [{ path: "/host/cat" }] };
+          if (path.startsWith("/api/conversations/search"))
+            return { items: [containerWorker] };
+          if (path === `/api/conversations/${worker.id}`)
+            return containerWorker;
+        },
+      });
+      await waitFor(() =>
+        expect(find(app, "workspace").options.length).toBeGreaterThan(1),
+      );
+      click(app, "select-worker");
+      expect(
+        [...find(app, "workspace").options].map((item) => item.value),
+      ).toEqual(["", "/host/cat"]);
+      expect(find(app, "workspace").value).toBe("");
+      draft(app, "Explain this container's work.");
+      click(app, "send");
+      expect(
+        app.request.mock.calls.some(([call]) => call.method === "POST"),
+      ).toBe(false);
+      expect(find(app, "draft").value).toBe("Explain this container's work.");
+      find(app, "workspace").value = "/host/cat";
+      find(app, "workspace").dispatchEvent(new Event("change"));
+      click(app, "send");
+      await waitFor(() =>
+        expect(app.request).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: "/api/conversations",
+            method: "POST",
+          }),
+        ),
+      );
+      const create = app.request.mock.calls.find(
+        ([call]) =>
+          call.path === "/api/conversations" && call.method === "POST",
+      )[0];
+      expect(create.body).toMatchObject({
+        conversation_runtime: "local",
+        workspace: { working_dir: "/host/cat" },
+        tags: controller.tags,
+      });
+      expect(create.body).not.toHaveProperty("parent_conversation_id");
+      expect(create.body.initial_message.content[0].text).toContain(worker.id);
+      expect(create.body.initial_message.content[0].text).toContain(
+        '"workspace":"/workspace"',
+      );
+    },
+  );
+
+  it.each([
+    null,
+    { conversation_runtime: "docker", available_conversation_runtimes: [] },
+  ])(
+    "refuses an unverified or Docker-only new Cat and recovers without losing its draft",
+    async (initialInfo) => {
+      let info = initialInfo;
+      const app = mountApp({
+        request: ({ path }) => {
+          if (path === "/server_info") {
+            if (!info) throw new Error("Backend unavailable");
+            return info;
+          }
+          if (path === "/api/workspaces")
+            return { workspaces: [{ path: "/host/cat" }] };
+        },
+      });
+      await waitFor(() =>
+        expect(find(app, "workspace").options.length).toBe(2),
+      );
+      find(app, "workspace").value = "/host/cat";
+      find(app, "workspace").dispatchEvent(new Event("change"));
+      draft(app, "Keep my request.");
+      click(app, "send");
+      await waitFor(() =>
+        expect(app.container.textContent).toContain(
+          "Could not verify a host-local runtime",
+        ),
+      );
+      expect(
+        app.request.mock.calls.some(([call]) => call.method === "POST"),
+      ).toBe(false);
+      expect(find(app, "draft").value).toBe("Keep my request.");
+      expect(find(app, "checked").hidden).toBe(true);
+      info = { conversation_runtime: "local" };
+      click(app, "refresh");
+      await waitFor(() => expect(find(app, "refresh").disabled).toBe(false));
+      click(app, "send");
+      await waitFor(() =>
+        expect(app.request).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: "/api/conversations",
+            method: "POST",
+          }),
+        ),
+      );
+    },
+  );
+
+  it("rechecks the saved host workspace before submitting a new Cat", async () => {
+    let workspaceAvailable = true;
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path === "/server_info")
+          return {
+            conversation_runtime: "local",
+            available_conversation_runtimes: ["local", "docker"],
+          };
+        if (path === "/api/workspaces")
+          return {
+            workspaces: workspaceAvailable ? [{ path: "/host/cat" }] : [],
+          };
+      },
+    });
+    await waitFor(() => expect(find(app, "workspace").options.length).toBe(2));
+    click(app, "select-worker");
+    find(app, "workspace").value = "/host/cat";
+    find(app, "workspace").dispatchEvent(new Event("change"));
+    draft(app, "Keep the worker in context.");
+    workspaceAvailable = false;
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.container.textContent).toContain(
+        "Choose a saved host workspace",
+      ),
+    );
+    expect(
+      app.request.mock.calls.some(([call]) => call.method === "POST"),
+    ).toBe(false);
+    expect(find(app, "workspace").value).toBe("");
+    expect(find(app, "draft").value).toBe("Keep the worker in context.");
+    expect(app.container.querySelector('[data-role="target"] span').title).toBe(
+      worker.id,
+    );
+    expect(find(app, "checked").hidden).toBe(true);
+  });
+
   it.each(["none", "accepted", "uncertain"])(
     "clears a recovered controller-read error and preserves the %s submission notice",
     async (outcome) => {
@@ -599,7 +751,8 @@ describe("Insider Cat App", () => {
     expect(
       create.body.agent_launch_additions.system_message_suffix_append,
     ).toContain("sibling of SmolPaws");
-    // Missing /server_info support does not block launch or invent a backend.
+    // Older local-only metadata needs no new runtime field or service addresses.
+    expect(create.body).not.toHaveProperty("conversation_runtime");
     expect(
       create.body.agent_launch_additions.system_message_suffix_append,
     ).not.toContain("<RUNTIME_SERVICES>");
@@ -629,6 +782,7 @@ describe("Insider Cat App", () => {
       request: ({ path }) => {
         if (path === "/server_info")
           return {
+            conversation_runtime: "local",
             runtime_services: {
               services: {
                 agent_server: {
