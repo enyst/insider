@@ -8,15 +8,22 @@ This repository includes the prepared browser bundle, source, skill,
 translations, and tests. Building or installing it does not require Odie's source
 checkout.
 
+The current development build is [App PR #2](https://github.com/enyst/insider/pull/2),
+paired with [Canvas #17558](https://github.com/OpenHands/OpenHands/pull/17558)
+and [Agent Server #5180](https://github.com/OpenHands/software-agent-sdk/pull/5180).
+These remain drafts; `main` does not yet contain the full companion and Voice
+behavior described below. Install the reviewed feature branch or a pinned commit
+with compatible Canvas and Agent Server builds.
+
 ## Install in Canvas
 
 Open **Customize → Apps → Add app** and enter:
 
-| Field           | Value                            |
-| --------------- | -------------------------------- |
-| Source          | `github:enyst/insider`           |
-| Ref             | `main`, or a reviewed commit SHA |
-| Repository path | Leave empty                      |
+| Field      | Value                                                  |
+| ---------- | ------------------------------------------------------ |
+| App source | `github:enyst/insider`                                   |
+| Ref        | `gpt/insider-voice-discovery`, or a reviewed commit SHA   |
+| Path       | Leave empty                                            |
 
 Installation starts disabled. Review and enable **Insider Cat**, then open
 **Projects** at `/extensions/insider-cat/projects`.
@@ -26,8 +33,8 @@ additions available. Canvas Apps do not currently support cloud backends. Apps
 run as trusted code inside Canvas and use authenticated requests to their owning
 backend.
 
-For local development, Source can instead be the absolute directory of this
-repository on the **Agent Server machine**. Leave Ref and Repository path empty.
+For local development, App source can instead be the absolute directory of this
+repository on the **Agent Server machine**. Leave Ref and Path empty.
 The backend copies the prepared `extension.js`; it does not install npm
 dependencies or run a build.
 
@@ -36,8 +43,8 @@ dependencies or run a build.
 - Put the Cat, its messages, and **Talk** at the center of the page. The SVG Cat
   rests, wakes, listens, speaks, and works as its state changes. Conversation
   browsing sits under **Your work**; the page has one set of voice controls.
-  The September 19, 2026 redesign supports reduced motion and keeps errors and
-  approval requests visible as text, alongside the Cat's pose.
+  Reduced motion is supported, and errors and approval requests remain visible
+  as text alongside the Cat's pose.
 - Browse conversations with workspace and title/ID filters, manual refresh, and
   explicit pagination. Filters apply to loaded conversations; the page shows its
   coverage. Approval requests, errors, paused work, and ended runs have distinct
@@ -137,11 +144,11 @@ must advertise its actual services and provide the referenced environment or
 key file to the agent. Missing metadata does not prevent launching a Cat, but
 the agent must establish the connection before claiming backend access.
 
-For now, both voice transports instruct the realtime model to delegate every
-new request, including greetings and recall, so conversation ownership stays
-clear. Fast acknowledgments can remain in Voice. Allowing Voice to answer small
-talk independently is a future UX choice that also needs deliberate transcript
-persistence; it must not create an unsaved second conversation.
+Both voice transports instruct the realtime model to delegate every new request,
+including greetings and recall. A spoken acknowledgment alone does not establish
+that the saved Cat received it. The bridge must confirm acceptance before Voice
+says that a request was sent. Requests received while the Cat is busy are not
+queued or used to steer the running task; repeat them after the Cat finishes.
 
 ### Provider setup and verification
 
@@ -177,55 +184,24 @@ tested `codex-cli 0.154.0` executable. It uses a dedicated Codex home under the
 server's persistence directory; `OH_CODEX_VOICE_HOME` can select another
 dedicated directory. Keep the relay's configuration in that directory.
 
-As of September 16, 2026, an existing file-store sign-in can be shared with
-explicit user authorization: symlink only the dedicated home's `auth.json` to
-the existing Codex `auth.json`, and set `cli_auth_credentials_store = "file"`
-in the dedicated configuration. Do not copy tokens or link the ordinary home's
-configuration, plugins, or MCP servers. The pinned 0.154.0 file-store save follows
-the symlink, so refresh updates the shared session file. This setup depends on
-that save behavior and does not apply to keyring storage.
+Use Codex's normal login flow in the dedicated home, for example:
 
-The September 19, 2026 setup uses these settings in the dedicated `config.toml`:
-
-```toml
-model = "gpt-5.6-luna"
-model_reasoning_effort = "high"
-cli_auth_credentials_store = "file"
+```sh
+CODEX_HOME=/path/to/insider-codex-home codex login --device-auth
 ```
 
-The model and effort select the Codex background thread, not the Live audio
-model or the saved Cat's separate agent profile. A real text-only Luna/high
-subscription probe completed successfully. The settings remain unchanged by
-the direct handoff implementation.
+Use that same directory for `OH_CODEX_VOICE_HOME`. The relay rejects the ordinary
+Codex home itself and enabled MCP configuration, disables unrelated tools, and
+uses an ephemeral thread per call. The device flow can be approved from another
+device; keep its one-time code private. A successful sign-in does not by itself
+verify Voice availability for the account; test a call.
 
-Historical verification, September 16, 2026: the previous tool-based relay used
-GPT-5.5 with low effort, and the saved Cat also used GPT-5.5. Three generated
-spoken requests reached `send_to_insider`, produced saved requests and answers,
-and returned through `appendSpeech` across two real calls using an existing
-Codex ChatGPT sign-in. The same peer survived opening the regular conversation;
-a fresh call correctly recalled the updated test word. An earlier trial had
-answered from Voice history without saving a new request. On September 19, the
-Luna/high relay received a handoff but completed without choosing
-`send_to_insider`, so no request reached the Cat. That failure motivated direct
-server dispatch. A real WebRTC test of the direct path on September 19 saved
-one request and its Cat answer, then returned that answer as spoken audio.
-A fresh call on September 20 then recalled the test word from that same Cat,
-saved its new question and answer, and spoke the correct word. Both calls used
-generated speech, the existing Codex sign-in, and a Luna/high Cat.
-A further September 20 check repaired an early saved Cat that had no workspace
-tools. Adding the standard tools preserved its ID, model, approvals, and all
-existing events. A generated spoken calculation then produced an actual terminal
-action and observation, a saved answer, and the matching spoken result. Voice
-also emitted a misleading waiting acknowledgment before that result; progress
-speech still needs refinement. A subsequent repair restored the eleven bundled
-default skills and accurate backend/authentication context to that same Cat,
-preserving its saved events. A real spoken backend-count request then invoked
-`openhands-api`, discovered the live API through the terminal, queried
-`/api/conversations/count`, saved the answer, and returned matching spoken audio.
-An independent API check agreed. This verifies the existing terminal-and-skills
-path for backend inspection; worker creation and messaging need their own live
-checks before claiming those flows are verified.
-Physical iPad microphone and speaker behavior remain device checks.
+The Codex thread's model settings govern its background thread, not the Live
+audio model or the saved Cat's separate Agent Profile. The background thread
+does not perform the Cat's work. The bridge starts each call with a bounded
+snapshot of the Cat's current saved context, including its active condensation
+summary. Long answers use a spoken excerpt and leave the complete result in the
+saved conversation.
 
 Call status includes fixed `error_code` values: `request_not_sent` means the
 request was not admitted to the saved Cat; `relay_failed` means its outcome
@@ -235,21 +211,6 @@ displays arbitrary backend error text. Missing or unknown codes also show a
 connection error. A second handoff received while the Cat is still working is
 reported as unsent, without cancelling the first request.
 
-If no suitable existing session is available, use Codex's normal login flow in
-the dedicated home, for example:
-
-```sh
-CODEX_HOME=/path/to/insider-codex-home codex login --device-auth
-```
-
-Use that same directory for `OH_CODEX_VOICE_HOME`. The relay rejects the ordinary
-Codex home itself and enabled MCP configuration, disables unrelated tools, and
-uses an ephemeral thread per call. A successful sign-in does not by itself verify
-voice entitlement; test a call on the account.
-The device flow can be approved from an iPad; ordinary browser login uses a
-localhost callback on the server machine. Keep its one-time code private.
-Long saved answers use a spoken excerpt from the beginning, with a notice that
-the full answer is in the conversation. The saved answer remains complete.
 The browser's missing-sign-in message appears before microphone access.
 
 On a Canvas version with companion controls, choose a saved Cat and select
@@ -318,21 +279,32 @@ They cover durable conversation identity, pagination, draft and target handling,
 confirmation settings, uncertain requests, lifecycle cleanup, localization,
 same-ID resume and condensation, and simulated WebRTC interruption/cancellation.
 
-Maintenance verification, **October 23, 2026**: the App draft still includes
-its current `main` (`521362c`), so no App merge was necessary. Since the October
-19 check, [PR #3](https://github.com/enyst/insider/pull/3) added local Codex
-**Stop speaking / Resume audio** controls to the draft (`4ea3a5a`), without a new
-server protocol or cancellation of saved Cat work. `npm run build` reproduced
-the committed bundle unchanged, and all **136 tests across 10 files** passed.
-The Canvas host API v1 and Agent Server profile-launch and Voice contracts
-remain compatible with this App. The paired [Canvas draft](https://github.com/OpenHands/OpenHands/pull/17558)
-and [Agent Server draft](https://github.com/OpenHands/software-agent-sdk/pull/5180)
-record their own upstream integration and checks. Automatic stale-speech and
-superseded-answer protection is separate work in [PR #4](https://github.com/enyst/insider/pull/4),
-which was still open and was not included in these checks. This is source and
-regression verification; the September live Voice results above remain dated
-evidence. This maintenance pass did not restart the development stack or repeat
-live provider, browser, or physical-device audio tests.
+## Verification record
+
+The [26 October integrated verification](https://github.com/enyst/insider/blob/bf99051b0c8293c324091c47bac5df3b3d16d45b/.pr/insider-verification-20261026.md)
+records the last live pass: 42 passing checks out of 46 scoped UI checks and nine
+SDK API recipes. Generated speech reached the real Codex provider, the saved
+OpenHands Cat used its normal tools and skills, and its saved result returned
+as incoming response audio. The pass also verified legacy-Cat resume, separate
+Cats, same-conversation navigation, explicit approval, compaction, local
+Stop/Resume, and call cleanup. App [PR #4](https://github.com/enyst/insider/pull/4)
+is included in this draft; the subsequent SDK fixes passed bounded replays of
+stale-answer suppression and truthful rejection of busy follow-ups.
+
+The remaining checks are physical microphone and speaker behavior on iPad, live
+OpenAI API Voice, switching backends during a live call, and complete
+keyboard-only traversal. The dated report preserves failed attempts and evidence
+limits. Browser transport measurements do not prove acoustic speaker output.
+
+Maintenance verification, **6 November 2026**: fetched App `main` remains
+`521362c2f19ac840f0dec971da353b08e6c90792`, already included in the draft, so no
+merge was required. All **150 tests across 10 files** passed on Node 24.22.1, and
+`npm run build` reproduced the prepared `extension.js` unchanged. Updated the
+Vite/Vitest development tools and vulnerable transitive dependencies to patched
+versions published more than seven days before this check; `npm audit` reports
+zero vulnerabilities. The paired Canvas and Agent Server PRs record their own
+main integrations and current checks. This maintenance pass does not claim a new
+live-provider, physical-device, or deployment test.
 
 ## License
 
