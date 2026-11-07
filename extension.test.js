@@ -360,6 +360,34 @@ describe("Insider Cat work board", () => {
     expect(row.querySelectorAll(".cat-ref").length).toBe(1);
   });
 
+  it("asks again for a live card after a transient error when the person refreshes", async () => {
+    let failures = 1;
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return {
+            items: [
+              { id: "a1", llm_message: { role: "assistant", content: [{ type: "text", text: `Started ${worker.id}.` }] } },
+            ],
+          };
+        if (path === `/api/conversations/${worker.id}`) {
+          if (failures-- > 0) throw new Error("HTTP request failed (503)");
+          return { ...worker, title: "Back again" };
+        }
+      },
+    });
+    const reads = () =>
+      app.request.mock.calls.filter(([call]) => call.path === `/api/conversations/${worker.id}`).length;
+    await waitFor(() => expect(reads()).toBe(1));
+    expect(app.container.querySelector(".cat-ref")).toBeNull();
+    click(app, "refresh");
+    await waitFor(() =>
+      expect(app.container.querySelector(".cat-ref")?.textContent).toContain("Back again"),
+    );
+  });
+
   it("shows live cards for conversations the Cat names", async () => {
     const named = {
       ...worker,

@@ -9,8 +9,10 @@ translations, and tests. Building or installing it does not require Odie's sourc
 checkout.
 
 The current development build is [App PR #2](https://github.com/enyst/insider/pull/2),
-paired with [Canvas #17558](https://github.com/OpenHands/OpenHands/pull/17558)
+paired with [Canvas #19495](https://github.com/OpenHands/OpenHands/pull/19495)
 and [Agent Server #5180](https://github.com/OpenHands/software-agent-sdk/pull/5180).
+Projects (conversation sender, reactions, resolved state) come from
+[Agent Server #6602](https://github.com/OpenHands/software-agent-sdk/pull/6602).
 These remain drafts; `main` does not yet contain the full companion and Voice
 behavior described below. Install the reviewed feature branch or a pinned commit
 with compatible Canvas and Agent Server builds.
