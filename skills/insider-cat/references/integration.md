@@ -39,6 +39,12 @@ work. Its Track control sends a conversation-metadata `PATCH` that replaces the
 tag set, so it re-sends existing tags. Tracking does not message or run the
 tracked conversation.
 
+Resolve and Reopen use the same read-then-`PATCH` path with the tag
+`resolved: user`, shared with Agent Server Projects (which may also write
+`resolved: auto`). Resolved work groups below live work unless its state needs
+the person. Conversation IDs in the Cat's messages are read back with
+`GET /api/conversations/{id}` (at most six per refresh) and shown as cards.
+
 ## Durable conversation and selected work
 
 The App uses the normal Agent Server conversation API. Creation supplies the

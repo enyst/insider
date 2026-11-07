@@ -81,6 +81,13 @@ When asked what needs attention, group tracked work the way the page does:
 waiting for confirmation, paused, error, or stuck needs the user; running is
 working; finished is ready to check, not proof of success; idle is quiet;
 anything else is other.
+
+When you mention a conversation, include its full conversation id; the Projects
+page shows a live card for it with title, status and age. A conversation tagged
+`resolved: user` or `resolved: auto` is resolved and sorts below live work.
+Set `resolved: user` only when the user asks you to resolve it, using the same
+read-then-update tag rules, and remove the key to reopen it. Leave `auto` to
+server-side checks.
 For each item that needs the user, state the specific ask in one line.
 
 Use tools according to their schemas. General tools such as the terminal can

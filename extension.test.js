@@ -257,7 +257,7 @@ describe("Insider Cat work board", () => {
     await waitFor(() =>
       expect(
         app.container.querySelector('[data-role="notice"]').textContent,
-      ).toBe("Couldn't update tracking: tag update refused"),
+      ).toBe("Couldn't update this conversation: tag update refused"),
     );
     expect(find(app, "track-worker").textContent).toBe("Stop tracking");
   });
@@ -285,6 +285,87 @@ describe("Insider Cat work board", () => {
     find(app, "controller").value = other.id;
     find(app, "controller").dispatchEvent(new Event("change"));
     expect(find(app, "track-worker").textContent).toBe("Track with Cat");
+  });
+
+  it("resolves and reopens a conversation from its card", async () => {
+    let saved = { team: "web" };
+    const app = mountApp({
+      request: ({ path, method, body }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [{ ...worker, execution_status: "finished", tags: saved }], next_page_id: null };
+        if (path === `/api/conversations/${worker.id}` && method === "GET")
+          return { ...worker, execution_status: "finished", tags: saved };
+        if (method === "PATCH") {
+          saved = body.tags;
+          return { success: true };
+        }
+      },
+    });
+    await waitFor(() => expect(groups(app)).toEqual([["finished", [worker.title]]]));
+    click(app, "resolve-worker");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith({
+        path: `/api/conversations/${worker.id}`,
+        method: "PATCH",
+        body: { tags: { team: "web", resolved: "user" } },
+      }),
+    );
+    // Resolved starts collapsed; its toggle keeps focus for keyboard users.
+    await waitFor(() => expect(groups(app)).toEqual([["resolved", []]]));
+    find(app, "group-resolved").click();
+    expect(document.activeElement).toBe(find(app, "group-resolved"));
+    expect(find(app, "resolve-worker").textContent).toBe("Reopen");
+    click(app, "resolve-worker");
+    await waitFor(() => expect(saved).toEqual({ team: "web" }));
+  });
+
+  it("shows live cards for conversations the Cat names", async () => {
+    const named = {
+      ...worker,
+      title: "Ship the board",
+      execution_status: "running",
+      updated_at: new Date(Date.now() - 5 * 60_000).toISOString(),
+    };
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return {
+            items: [
+              {
+                llm_message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "text",
+                      text: `Started ${worker.id.replace(/-/g, "")} and checked myself (${controller.id}); 99999999-9999-4999-8999-999999999999 is gone.`,
+                    },
+                  ],
+                },
+              },
+            ],
+          };
+        if (path === `/api/conversations/${worker.id.replace(/-/g, "")}`)
+          return named;
+        if (path === "/api/conversations/99999999-9999-4999-8999-999999999999")
+          throw new Error("Not found");
+      },
+    });
+    await waitFor(() =>
+      expect(app.container.querySelectorAll(".cat-ref").length).toBe(1),
+    );
+    const card = app.container.querySelector(".cat-ref");
+    expect(card.textContent).toContain("Ship the board");
+    expect(card.dataset.status).toBe("running");
+    expect(card.textContent).toContain("5m ago");
+    card.click();
+    expect(app.host.navigate).toHaveBeenCalledWith(
+      `/conversations/${encodeURIComponent(worker.id)}`,
+    );
+    expect(
+      app.request.mock.calls.some(([call]) => call.path === `/api/conversations/${controller.id}` && call.method === "PATCH"),
+    ).toBe(false);
   });
 
   it("hides the Cat filter until a Cat is chosen", async () => {

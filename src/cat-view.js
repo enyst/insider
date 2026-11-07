@@ -219,6 +219,12 @@ export const catViewStyles = `
 .insider-app .cat-card:is([data-status=error],[data-status=stuck]) .cat-badge{color:#f4aaa0}
 .insider-app .cat-card[data-status=running] .cat-badge{color:var(--cat-accent)}
 .insider-app .cat-card button{font-size:12px;min-height:40px;padding:7px 10px}
+.insider-app .cat-ref{display:grid;gap:4px;width:100%;margin-block-start:10px;padding:10px 12px;text-align:start;border:1px solid var(--cat-line);border-radius:10px;background:#ffffff05;white-space:normal;font-size:13px;cursor:pointer}
+.insider-app .cat-ref:hover{border-color:var(--cat-accent)}
+.insider-app .cat-ref-title{font-weight:550;overflow-wrap:anywhere}
+.insider-app .cat-ref[data-status=waiting_for_confirmation] .cat-badge{color:#f0c697}
+.insider-app .cat-ref:is([data-status=error],[data-status=stuck]) .cat-badge{color:#f4aaa0}
+.insider-app .cat-ref[data-status=running] .cat-badge{color:var(--cat-accent)}
 .insider-app .cat-target{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#cad7b40a;border-radius:10px;border-inline-start:2px solid var(--cat-accent);font-size:12px;min-width:0}
 .insider-app .cat-target>span{min-width:0;overflow-wrap:anywhere;flex:1}
 .insider-app .cat-target button{font-size:12px;flex-shrink:0}
