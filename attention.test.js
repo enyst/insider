@@ -76,17 +76,18 @@ describe("Cat tracking tags", () => {
 });
 
 describe("resolved conversations", () => {
-  it("wins over every state except one that needs the person", () => {
+  it("wins over every state except needs-you and running work", () => {
     const resolved = { tags: { resolved: "user" } };
     const groups = groupByAttention([
       item("a", "finished", resolved),
       item("b", "idle", { tags: { resolved: "auto" } }),
       item("c", "waiting_for_confirmation", resolved),
       item("d", "running", { tags: { resolved: "maybe" } }),
+      item("e", "running", resolved),
     ]);
     expect(groups.map((g) => [g.id, g.items.map((c) => c.id)])).toEqual([
       ["needsYou", ["c"]],
-      ["working", ["d"]],
+      ["working", ["d", "e"]],
       ["resolved", ["a", "b"]],
     ]);
   });

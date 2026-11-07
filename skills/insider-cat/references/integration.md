@@ -42,7 +42,7 @@ tracked conversation.
 Resolve and Reopen use the same read-then-`PATCH` path with the tag
 `resolved: user`, shared with Agent Server Projects (which may also write
 `resolved: auto`). Resolved work groups below live work unless its state needs
-the person. Conversation IDs in the Cat's messages are read back with
+the person or it is running again. Conversation IDs in the Cat's messages are read back with
 `GET /api/conversations/{id}` (at most six per refresh) and shown as cards.
 
 ## Durable conversation and selected work

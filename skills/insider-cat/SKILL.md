@@ -88,7 +88,8 @@ In written messages, name a conversation by its full id; the Projects page
 shows a live card for it when it belongs to the current backend. Do not read
 ids aloud during voice. A conversation tagged `resolved: user` or
 `resolved: auto` is resolved and sorts below live work, unless it is waiting
-for confirmation, paused, in error, or stuck, which still needs the user.
+for confirmation, paused, in error, or stuck (which still needs the user), or
+running again (which is working).
 Set or remove `resolved: user` only when the user asks, using the same
 read-then-update tag rules. Never set or clear `resolved: auto`; server-side
 checks own it.

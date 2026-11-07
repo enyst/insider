@@ -57,7 +57,8 @@ dependencies or run a build.
   sub-conversations. Tracking only edits tags; it never messages the work.
 - **Resolve** marks work as done with the shared `resolved: user` tag;
   **Reopen** removes it. Resolved work moves to a collapsed **Resolved** group
-  unless it needs you again (approval, paused, error, stuck). Agent Server
+  unless it needs you again (approval, paused, error, stuck) or is running
+  again. Agent Server
   Projects may also set `resolved: auto` from a server-side check.
 - When the Cat names a conversation by its ID, its message shows a live card
   with the title, status and last update; selecting it opens the conversation.

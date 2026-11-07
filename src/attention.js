@@ -14,7 +14,8 @@ export const ATTENTION_GROUPS = [
 export const COLLAPSED_GROUPS = new Set(["idle", "resolved"]);
 
 // Shared with Agent Server Projects: "user" from the Resolve button, "auto"
-// from a server-side hook. Resolved wins over every state except needs-you.
+// from a server-side hook. Resolved wins over every state except needs-you
+// and working.
 export const RESOLVED_TAG = "resolved";
 export const isResolved = (conversation) =>
   ["user", "auto"].includes(conversation?.tags?.[RESOLVED_TAG]);
@@ -36,7 +37,10 @@ const groupOf = new Map(
 /** The board group a conversation belongs to. */
 export function groupFor(conversation) {
   const group = groupOf.get(conversation?.execution_status) || "other";
-  return isResolved(conversation) && group !== "needsYou" ? "resolved" : group;
+  // Running work was just reopened by a new message, matching Agent Server.
+  return isResolved(conversation) && !["needsYou", "working"].includes(group)
+    ? "resolved"
+    : group;
 }
 
 /** Return non-empty groups in attention order; unknown states go to "other". */
