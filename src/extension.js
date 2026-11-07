@@ -969,6 +969,16 @@ export function activate(host) {
                     : "assistant",
               );
               row.append(label, document.createTextNode(message.text));
+              const rowRefs = new Map();
+              for (const ref of [
+                ...(message.sender ? [message.sender] : []),
+                ...conversationRefs(message.text),
+              ])
+                if (!rowRefs.has(idKey(ref))) rowRefs.set(idKey(ref), ref);
+              for (const ref of rowRefs.values()) {
+                const linked = refs.get(idKey(ref));
+                if (linked) row.append(refCard(linked));
+              }
               const chips = message.id && reactions.get(message.id);
               if (chips?.length) {
                 const strip = document.createElement("div");
@@ -981,23 +991,15 @@ export function activate(host) {
                   item.title = chip.sources
                     .map((source) => t(source === "user" ? "user" : "assistant"))
                     .join(", ");
+                  // Screen readers name the emoji in the reader's language.
+                  item.setAttribute("role", "img");
                   item.setAttribute(
                     "aria-label",
-                    `${chip.emoji.replace(/_/g, " ")}: ${item.title}`,
+                    `${REACTION_EMOJI[chip.emoji]} ${item.title}`,
                   );
                   strip.append(item);
                 }
                 row.append(strip);
-              }
-              const rowRefs = new Map();
-              for (const ref of [
-                ...(message.sender ? [message.sender] : []),
-                ...conversationRefs(message.text),
-              ])
-                if (!rowRefs.has(idKey(ref))) rowRefs.set(idKey(ref), ref);
-              for (const ref of rowRefs.values()) {
-                const linked = refs.get(idKey(ref));
-                if (linked) row.append(refCard(linked));
               }
               history.append(row);
             }
