@@ -242,6 +242,22 @@ describe("Insider voice lifecycle", () => {
     expect(JSON.stringify(output)).not.toContain("Typed answer");
   });
 
+  it("still answers when a hook nudge or a worker report arrived during the request", async () => {
+    const app = setup();
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    const posted = app.request.mock.calls.find(([call]) => call.method === "POST" && call.path.endsWith("/events"))[0];
+    const own = {id: "own", source: "user", llm_message: {role: "user", content: posted.body.content}};
+    const nudge = {id: "nudge", source: "environment", llm_message: {role: "user", content: [{type: "text", text: "Stop hook feedback"}]}};
+    const report = {id: "report", source: "user", sender: "conversation:abc", llm_message: {role: "user", content: [{type: "text", text: "Worker done"}]}};
+    app.setStatus("finished");
+    app.setEvents([{id: "answer", action: {kind: "FinishAction", message: "Spoken answer"}}, nudge, report, own]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = app.sent().find(event => event.item?.call_id === toolEvent.call_id);
+    expect(JSON.parse(result.item.output)).toMatchObject({status: "answered", answer: "Spoken answer"});
+  });
+
   it("answers from output after the spoken request's own saved message", async () => {
     const app = setup();
     await app.start();

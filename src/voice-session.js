@@ -30,6 +30,13 @@ const userText = (event) =>
         .map((part) => part.text)
         .join("\n")
     : null;
+// Input that can change what the Cat answers: a person's message, not hook
+// or stuck-detector nudges (source "environment") or another conversation's
+// report (sender "conversation:<id>"), which the same run handles.
+const isPersonInput = (event) =>
+  userText(event) !== null &&
+  event.source !== "environment" &&
+  !String(event.sender || "").startsWith("conversation:");
 let voiceRequestCount = 0;
 const textFromEvent = (event) => {
   if (event.action?.kind === "FinishAction") return event.action.message || "";
@@ -362,10 +369,12 @@ export function createVoiceSession({
       // Newest first. Only output after this request's own message counts,
       // and any other user input since the request makes the answer ambiguous.
       const own = saved.findIndex((event) => userText(event)?.includes(marker));
+      // A full page without this request's message may have pushed out other
+      // input too, so the answer cannot be tied to this request.
+      const lostOwn = own < 0 && (events.items || []).length >= 50;
       if (
-        saved.some(
-          (event, index) => index !== own && userText(event) !== null,
-        )
+        lostOwn ||
+        saved.some((event, index) => index !== own && isPersonInput(event))
       )
         return {
           status: "superseded",

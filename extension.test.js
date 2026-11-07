@@ -373,7 +373,8 @@ describe("Insider Cat work board", () => {
             ],
           };
         if (path === `/api/conversations/${worker.id}`) {
-          if (failures-- > 0) throw new Error("HTTP request failed (503)");
+          if (failures-- > 0)
+            throw Object.assign(new Error("HTTP request failed (503 Service Unavailable)"), { status: 503 });
           return { ...worker, title: "Back again" };
         }
       },
@@ -418,7 +419,7 @@ describe("Insider Cat work board", () => {
         if (path === `/api/conversations/${worker.id.replace(/-/g, "")}`)
           return named;
         if (path === "/api/conversations/99999999-9999-4999-8999-999999999999")
-          throw new Error("Not found");
+          throw Object.assign(new Error("HTTP request failed (404 Not Found)"), { status: 404 });
       },
     });
     await waitFor(() =>
