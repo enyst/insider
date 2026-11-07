@@ -204,7 +204,11 @@ export const catViewStyles = `
 .insider-app .cat-work-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .insider-app .cat-work-head button{font-size:12px;border:0;color:var(--cat-muted)}
 .insider-app .cat-filters{display:grid;gap:8px}
-.insider-app .cat-cards{display:grid}
+.insider-app .cat-cards{display:grid;gap:4px}
+.insider-app .cat-group{display:grid}
+.insider-app .cat-group-head{justify-self:start;border:0;background:none;padding:12px 0 6px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--cat-muted);cursor:pointer}
+.insider-app .cat-group-head::before{content:"▾";display:inline-block;margin-inline-end:6px;transition:transform .15s}
+.insider-app .cat-group-head[aria-expanded=false]::before{transform:rotate(-90deg)}
 .insider-app .cat-card{padding:16px 0;border-block-start:1px solid var(--cat-line);display:grid;gap:9px;min-width:0}
 .insider-app .cat-card.is-selected{border-inline-start:2px solid var(--cat-accent);padding-inline-start:12px}
 .insider-app .cat-card-title{font-weight:550;overflow-wrap:anywhere}
@@ -254,7 +258,7 @@ export const catPageMarkup = `<style>${catViewStyles}</style>
     </section>
     <section class="cat-stack cat-work">
       <div class="cat-work-head"><h2 data-copy="workTitle"></h2><button data-action="refresh" data-copy="refresh"></button></div>
-      <div class="cat-filters"><input data-action="search" type="search"><select data-action="project"></select></div>
+      <div class="cat-filters"><input data-action="search" type="search"><select data-action="project"></select><select data-action="scope" hidden></select></div>
       <p data-role="coverage" class="cat-muted" role="status"></p><div data-role="cards" class="cat-cards"></div><button data-action="load-more" data-copy="loadMore" hidden></button>
     </section>
   </div>`;

@@ -136,6 +136,165 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("Insider Cat work board", () => {
+  const running = {
+    ...worker,
+    id: "44444444-4444-4444-8444-444444444444",
+    title: "Build the release",
+    execution_status: "running",
+    tags: { insidercat: controller.id, insiderrole: "worker" },
+  };
+  const idle = {
+    ...worker,
+    id: "55555555-5555-4555-8555-555555555555",
+    title: "Old experiment",
+    execution_status: "idle",
+  };
+  const groups = (app) =>
+    [...app.container.querySelectorAll(".cat-group")].map((section) => [
+      section.dataset.group,
+      [...section.querySelectorAll(".cat-card-title")].map(
+        (node) => node.textContent,
+      ),
+    ]);
+
+  it("groups work by what it needs and collapses idle work", async () => {
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [idle, running, worker], next_page_id: null };
+      },
+    });
+    await waitFor(() => expect(groups(app).length).toBe(3));
+    expect(groups(app)).toEqual([
+      ["needsYou", [worker.title]],
+      ["working", [running.title]],
+      ["idle", []],
+    ]);
+    const idleHead = find(app, "group-idle");
+    expect(idleHead.getAttribute("aria-expanded")).toBe("false");
+    idleHead.click();
+    expect(groups(app)[2]).toEqual(["idle", [idle.title]]);
+  });
+
+  it("filters to the Cat's work and tracks a conversation with the Cat", async () => {
+    const app = mountApp({
+      request: ({ path, method }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return {
+            items: [controller, running, worker],
+            next_page_id: null,
+          };
+        if (method === "PATCH" && path === `/api/conversations/${worker.id}`)
+          return { success: true };
+      },
+    });
+    await waitFor(() => expect(find(app, "scope").hidden).toBe(false));
+    find(app, "scope").value = "cat";
+    find(app, "scope").dispatchEvent(new Event("change"));
+    expect(groups(app)).toEqual([["working", [running.title]]]);
+
+    find(app, "scope").value = "all";
+    find(app, "scope").dispatchEvent(new Event("change"));
+    const needsYou = app.container.querySelector('[data-group="needsYou"]');
+    needsYou.querySelector('[data-action="track-worker"]').click();
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith({
+        path: `/api/conversations/${worker.id}`,
+        method: "PATCH",
+        body: {
+          tags: { insidercat: controller.id, insiderrole: "worker" },
+        },
+      }),
+    );
+    find(app, "scope").value = "cat";
+    find(app, "scope").dispatchEvent(new Event("change"));
+    await waitFor(() =>
+      expect(groups(app)).toEqual([
+        ["needsYou", [worker.title]],
+        ["working", [running.title]],
+      ]),
+    );
+  });
+
+  it("tracks from the saved tags, keeps focus, and reports a failed update", async () => {
+    let fail = false;
+    const app = mountApp({
+      request: ({ path, method }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller, worker], next_page_id: null };
+        if (path === `/api/conversations/${worker.id}` && method === "GET")
+          return { ...worker, tags: { team: "web" } };
+        if (method === "PATCH") {
+          if (fail) throw new Error("tag update refused");
+          return { success: true };
+        }
+      },
+    });
+    await waitFor(() => expect(find(app, "track-worker")).not.toBeNull());
+    find(app, "track-worker").focus();
+    click(app, "track-worker");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith({
+        path: `/api/conversations/${worker.id}`,
+        method: "PATCH",
+        body: {
+          tags: {
+            team: "web",
+            insidercat: controller.id,
+            insiderrole: "worker",
+          },
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(find(app, "track-worker").textContent).toBe("Stop tracking"),
+    );
+    expect(document.activeElement).toBe(find(app, "track-worker"));
+
+    fail = true;
+    click(app, "track-worker");
+    await waitFor(() =>
+      expect(
+        app.container.querySelector('[data-role="notice"]').textContent,
+      ).toBe("Couldn't update tracking: tag update refused"),
+    );
+    expect(find(app, "track-worker").textContent).toBe("Stop tracking");
+  });
+
+  it("re-renders tracking for a newly chosen Cat", async () => {
+    const other = {
+      ...controller,
+      id: "66666666-6666-4666-8666-666666666666",
+      title: "Second Cat",
+    };
+    const tracked = { ...worker, tags: { insidercat: controller.id } };
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller, other, tracked], next_page_id: null };
+        if (path === `/api/conversations/${other.id}`) return other;
+      },
+    });
+    await waitFor(() =>
+      expect(find(app, "controller").options.length).toBe(3),
+    );
+    find(app, "controller").value = controller.id;
+    find(app, "controller").dispatchEvent(new Event("change"));
+    expect(find(app, "track-worker").textContent).toBe("Stop tracking");
+    find(app, "controller").value = other.id;
+    find(app, "controller").dispatchEvent(new Event("change"));
+    expect(find(app, "track-worker").textContent).toBe("Track with Cat");
+  });
+
+  it("hides the Cat filter until a Cat is chosen", async () => {
+    const app = mountApp();
+    await waitFor(() => expect(groups(app).length).toBe(1));
+    expect(find(app, "scope").hidden).toBe(true);
+    expect(find(app, "track-worker")).toBeNull();
+  });
+});
+
 describe("Insider Cat App", () => {
   it.each(["local", "docker"])(
     "keeps a Cat on the host when a mixed backend defaults to %s",
