@@ -9,7 +9,13 @@ import {
   ATTENTION_GROUPS,
   COLLAPSED_GROUPS,
   belongsToCat,
+  conversationRefs,
   groupByAttention,
+  groupFor,
+  idKey,
+  isResolved,
+  relativeAge,
+  resolvedTags,
   trackedTags,
   untrackedTags,
 } from "./attention.js";
@@ -22,6 +28,9 @@ import {
 // Self-contained App ABI v1 implementation. All backend access uses the host.
 const INSIDER_INSTRUCTIONS = "__INSIDER_SKILL_TEXT__";
 const PAGE_SIZE = 100;
+// Conversations the Cat names are re-read on each history refresh.
+const REF_LIMIT = 6;
+const REF_TIMEOUT = 4000;
 const CONTROLLER_STORAGE_PREFIX = "insider-cat:controller:";
 const NEW_COMMAND = "/new";
 const CONDENSE_COMMAND = "/condense";
@@ -345,11 +354,12 @@ export function activate(host) {
         let timer = null;
         let board = [];
         let cursor = null;
+        const missingRefs = new Set();
         let boardScope = "all";
         const collapsedGroups = new Set(COLLAPSED_GROUPS);
         const tracking = new Set();
         const groupCopy = Object.fromEntries(
-          [...ATTENTION_GROUPS.map((g) => g.id), "other"].map((id) => [
+          [...ATTENTION_GROUPS.map((g) => g.id), "other", "resolved"].map((id) => [
             id,
             `group${id[0].toUpperCase()}${id.slice(1)}`,
           ]),
@@ -540,40 +550,52 @@ export function activate(host) {
           action("scope").hidden = !controllerId;
         }
         async function setTracked(c, tracked, controllerId) {
-          if (
-            !controllerId ||
-            state.controller?.id !== controllerId ||
-            tracking.has(c.id)
-          )
-            return;
+          if (!controllerId || state.controller?.id !== controllerId) return;
+          await updateTags(
+            c,
+            (tags) =>
+              tracked
+                ? trackedTags(tags, controllerId)
+                : untrackedTags(tags),
+            "track-worker",
+            () => state.controller?.id === controllerId,
+          );
+        }
+        async function updateTags(c, nextTags, focusAction, stillValid) {
+          if (tracking.has(c.id)) return;
           tracking.add(c.id);
           renderBoard();
           try {
             // A tag update replaces the whole set: start from the saved tags.
             const fresh = await request(detailPath(c.id));
-            if (!alive || state.controller?.id !== controllerId) return;
-            const tags = tracked
-              ? trackedTags(fresh?.tags, controllerId)
-              : untrackedTags(fresh?.tags);
+            if (!alive || !stillValid()) return;
+            const tags = nextTags(fresh?.tags);
             await request(detailPath(c.id), "PATCH", { tags });
             if (!alive) return;
             board = board.map((item) =>
               item.id === c.id ? { ...item, ...fresh, tags } : item,
             );
           } catch (error) {
-            notice(t("trackError", { message: errorText(error) }));
+            notice(t("tagError", { message: errorText(error) }));
           } finally {
             tracking.delete(c.id);
             if (alive) {
               renderBoard();
+              // A resolved card may move into a collapsed group: keep focus
+              // on that group's toggle instead of losing it.
+              const moved = board.find((item) => item.id === c.id);
               restoreFocus(
-                `[data-card="${c.id}"] [data-action="track-worker"]`,
+                `[data-card="${c.id}"] [data-action="${focusAction}"]`,
+                moved && `[data-action="group-${groupFor(moved)}"]`,
               );
             }
           }
         }
-        function restoreFocus(selector) {
-          root.querySelector(selector)?.focus?.();
+        function restoreFocus(selector, fallback) {
+          (
+            root.querySelector(selector) ||
+            (fallback && root.querySelector(fallback))
+          )?.focus?.();
         }
         function renderBoard() {
           if (!alive) return;
@@ -666,6 +688,22 @@ export function activate(host) {
           link.textContent = t("open");
           link.addEventListener("click", () => open(c.id));
           buttons.append(select, link);
+          const resolved = isResolved(c);
+          const resolve = document.createElement("button");
+          resolve.dataset.action = "resolve-worker";
+          resolve.textContent = t(resolved ? "reopen" : "resolve");
+          resolve.disabled = tracking.has(c.id);
+          resolve.addEventListener(
+            "click",
+            () =>
+              void updateTags(
+                c,
+                (tags) => resolvedTags(tags, !resolved),
+                "resolve-worker",
+                () => true,
+              ),
+          );
+          buttons.append(resolve);
           if (controllerId) {
             const tracked = belongsToCat(c, controllerId);
             const track = document.createElement("button");
@@ -782,6 +820,75 @@ export function activate(host) {
             }
           }
         }
+        // Live status for conversations the Cat names in its messages.
+        async function readConversationRefs(messages, controllerId) {
+          const keys = new Map();
+          for (const message of messages)
+            for (const ref of conversationRefs(message.text))
+              if (idKey(ref) !== idKey(controllerId))
+                keys.set(idKey(ref), ref);
+          const wanted = [...keys.values()]
+            .filter((ref) => !missingRefs.has(idKey(ref)))
+            .slice(-REF_LIMIT);
+          const found = await Promise.allSettled(
+            wanted.map((ref) =>
+              Promise.race([
+                request(detailPath(ref)),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error("timeout")), REF_TIMEOUT),
+                ),
+              ]),
+            ),
+          );
+          const refs = new Map();
+          found.forEach((result, index) => {
+            if (result.status === "fulfilled" && result.value?.id)
+              refs.set(idKey(result.value.id), result.value);
+            // Other UUIDs in text (events, tool calls) are not conversations:
+            // stop asking for them while this page is open.
+            else if (!/timeout/.test(String(result.reason?.message)))
+              missingRefs.add(idKey(wanted[index]));
+          });
+          return refs;
+        }
+        function refCard(c) {
+          const card = document.createElement("button");
+          card.type = "button";
+          card.className = "cat-ref";
+          card.dataset.action = "open-ref";
+          card.dataset.ref = idKey(c.id);
+          card.dataset.status = c.execution_status || "unknown";
+          card.title = c.id;
+          const title = document.createElement("span");
+          title.className = "cat-ref-title";
+          title.textContent = c.title || c.id;
+          const meta = document.createElement("span");
+          meta.className = "cat-card-meta";
+          const badge = document.createElement("span");
+          badge.className = "cat-badge";
+          badge.textContent =
+            groupFor(c) === "resolved"
+              ? t("groupResolved")
+            : t(
+                EXECUTION_STATUSES.has(c.execution_status)
+                  ? c.execution_status
+                  : "unknown",
+              );
+          meta.append(badge);
+          const age = relativeAge(
+            c.updated_at,
+            Date.now(),
+            root.closest("[lang]")?.lang || undefined,
+          );
+          if (age) {
+            const when = document.createElement("span");
+            when.textContent = age;
+            meta.append(when);
+          }
+          card.append(title, meta);
+          card.addEventListener("click", () => open(c.id));
+          return card;
+        }
         async function refreshController() {
           const id = state.controller?.id;
           if (!id || !alive) return;
@@ -808,14 +915,26 @@ export function activate(host) {
             state.controllerInvalid = false;
             state.controllerStatusUnknown = false;
             state.controller = info;
+            const messages = [...(events.items || [])]
+              .reverse()
+              .map(messageText)
+              .filter(Boolean);
+            const refs = await readConversationRefs(messages, id);
+            if (
+              !alive ||
+              generation !== readGeneration ||
+              state.controller?.id !== id
+            )
+              return;
             const history = role("history");
+            // Rebuilding the history must not drop keyboard focus on a card.
+            const focusedRef = document.activeElement?.closest?.(".cat-ref")
+              ?.dataset.ref;
             const previousScroll = history.scrollTop;
             const followLatest =
               history.scrollHeight - previousScroll - history.clientHeight < 48;
             history.replaceChildren();
-            for (const event of [...(events.items || [])].reverse()) {
-              const message = messageText(event);
-              if (!message) continue;
+            for (const message of messages) {
               const row = document.createElement("div");
               row.className = "cat-message";
               row.dataset.speaker = message.role;
@@ -824,10 +943,18 @@ export function activate(host) {
                 message.role === "user" ? "user" : "assistant",
               );
               row.append(label, document.createTextNode(message.text));
+              for (const ref of conversationRefs(message.text)) {
+                const linked = refs.get(idKey(ref));
+                if (linked) row.append(refCard(linked));
+              }
               history.append(row);
             }
             if (!history.childElementCount)
               history.textContent = t("noMessages");
+            if (focusedRef)
+              history
+                .querySelector(`.cat-ref[data-ref="${focusedRef}"]`)
+                ?.focus();
             history.scrollTop = followLatest
               ? history.scrollHeight
               : previousScroll;

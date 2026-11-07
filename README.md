@@ -55,6 +55,14 @@ dependencies or run a build.
   Cat is chosen, **This Cat's work** narrows the list to conversations tracked by that Cat: workers it tagged
   with `insidercat`, ones you added with **Track with Cat**, and its own
   sub-conversations. Tracking only edits tags; it never messages the work.
+- **Resolve** marks work as done with the shared `resolved: user` tag;
+  **Reopen** removes it. Resolved work moves to a collapsed **Resolved** group
+  unless it needs you again (approval, paused, error, stuck) or is running
+  again. Agent Server
+  Projects may also set `resolved: auto` from a server-side check.
+- When the Cat names a conversation by its ID, its message shows a live card
+  with the title, status and last update; selecting it opens the conversation.
+  Up to six named conversations are re-read on each history refresh.
 - Select work using its full conversation ID without replacing your draft.
   Opening a conversation stays inside Canvas.
 - Discover saved Cat controllers across all conversation-list pages. A single

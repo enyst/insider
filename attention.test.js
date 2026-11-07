@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   belongsToCat,
+  conversationRefs,
+  relativeAge,
+  resolvedTags,
   groupByAttention,
   trackedTags,
   untrackedTags,
@@ -69,5 +72,53 @@ describe("Cat tracking tags", () => {
     expect(
       untrackedTags({ smolpaws: "insider", insiderrole: "worker", insidercat: cat }),
     ).toEqual({ smolpaws: "insider", insiderrole: "worker" });
+  });
+});
+
+describe("resolved conversations", () => {
+  it("wins over every state except needs-you and running work", () => {
+    const resolved = { tags: { resolved: "user" } };
+    const groups = groupByAttention([
+      item("a", "finished", resolved),
+      item("b", "idle", { tags: { resolved: "auto" } }),
+      item("c", "waiting_for_confirmation", resolved),
+      item("d", "running", { tags: { resolved: "maybe" } }),
+      item("e", "running", resolved),
+    ]);
+    expect(groups.map((g) => [g.id, g.items.map((c) => c.id)])).toEqual([
+      ["needsYou", ["c"]],
+      ["working", ["d", "e"]],
+      ["resolved", ["a", "b"]],
+    ]);
+  });
+
+  it("sets and clears the shared resolved tag", () => {
+    expect(resolvedTags({ team: "web" }, true)).toEqual({
+      team: "web",
+      resolved: "user",
+    });
+    expect(resolvedTags({ team: "web", resolved: "auto" }, false)).toEqual({
+      team: "web",
+    });
+  });
+});
+
+describe("conversation references", () => {
+  it("finds dashed and plain IDs once each, in order, up to the limit", () => {
+    const a = "11111111-1111-4111-8111-111111111111";
+    const b = "22222222222242228222222222222222";
+    expect(
+      conversationRefs(`see ${a}, then ${b} and ${a.replace(/-/g, "")}`),
+    ).toEqual([a, b]);
+    expect(conversationRefs(`${a} ${b}`, 1)).toEqual([a]);
+    expect(conversationRefs("no ids here")).toEqual([]);
+  });
+
+  it("formats a compact relative age", () => {
+    const now = Date.parse("2026-11-07T12:00:00Z");
+    expect(relativeAge("2026-11-07T11:55:00Z", now, "en")).toBe("5m ago");
+    expect(relativeAge("2026-11-07T09:00:00Z", now, "en")).toBe("3h ago");
+    expect(relativeAge("not a date", now, "en")).toBe("");
+    expect(relativeAge("2026-11-07T12:02:00Z", now, "en")).toBe("now");
   });
 });
