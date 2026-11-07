@@ -360,6 +360,35 @@ describe("Insider Cat work board", () => {
     expect(row.querySelectorAll(".cat-ref").length).toBe(1);
   });
 
+  it("asks again for a live card after a transient error when the person refreshes", async () => {
+    let failures = 1;
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return {
+            items: [
+              { id: "a1", llm_message: { role: "assistant", content: [{ type: "text", text: `Started ${worker.id}.` }] } },
+            ],
+          };
+        if (path === `/api/conversations/${worker.id}`) {
+          if (failures-- > 0)
+            throw Object.assign(new Error("HTTP request failed (503 Service Unavailable)"), { status: 503 });
+          return { ...worker, title: "Back again" };
+        }
+      },
+    });
+    const reads = () =>
+      app.request.mock.calls.filter(([call]) => call.path === `/api/conversations/${worker.id}`).length;
+    await waitFor(() => expect(reads()).toBe(1));
+    expect(app.container.querySelector(".cat-ref")).toBeNull();
+    click(app, "refresh");
+    await waitFor(() =>
+      expect(app.container.querySelector(".cat-ref")?.textContent).toContain("Back again"),
+    );
+  });
+
   it("shows reaction chips on the message they target", async () => {
     const app = mountApp({
       request: ({ path }) => {
@@ -427,7 +456,7 @@ describe("Insider Cat work board", () => {
         if (path === `/api/conversations/${worker.id.replace(/-/g, "")}`)
           return named;
         if (path === "/api/conversations/99999999-9999-4999-8999-999999999999")
-          throw new Error("Not found");
+          throw Object.assign(new Error("HTTP request failed (404 Not Found)"), { status: 404 });
       },
     });
     await waitFor(() =>

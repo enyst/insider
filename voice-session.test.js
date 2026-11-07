@@ -224,6 +224,54 @@ describe("Insider voice lifecycle", () => {
     expect(JSON.parse(result.item.output).status).toBe("superseded");
   });
 
+  it("does not speak an answer to input typed in the regular chat after the spoken request", async () => {
+    const app = setup();
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    const posted = app.request.mock.calls.find(([call]) => call.method === "POST" && call.path.endsWith("/events"))[0];
+    const own = {id: "own", llm_message: {role: "user", content: posted.body.content}};
+    const typed = {id: "typed", llm_message: {role: "user", content: [{type: "text", text: "Something else"}]}};
+    app.setStatus("finished");
+    // Newest first: the answer belongs to the typed message, not the spoken one.
+    app.setEvents([{id: "answer", action: {kind: "FinishAction", message: "Typed answer"}}, typed, own]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = app.sent().find(event => event.item?.call_id === toolEvent.call_id);
+    const output = JSON.parse(result.item.output);
+    expect(output.status).toBe("superseded");
+    expect(JSON.stringify(output)).not.toContain("Typed answer");
+  });
+
+  it("still answers when a hook nudge or a worker report arrived during the request", async () => {
+    const app = setup();
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    const posted = app.request.mock.calls.find(([call]) => call.method === "POST" && call.path.endsWith("/events"))[0];
+    const own = {id: "own", source: "user", llm_message: {role: "user", content: posted.body.content}};
+    const nudge = {id: "nudge", source: "environment", llm_message: {role: "user", content: [{type: "text", text: "Stop hook feedback"}]}};
+    const report = {id: "report", source: "user", sender: "conversation:abc", llm_message: {role: "user", content: [{type: "text", text: "Worker done"}]}};
+    app.setStatus("finished");
+    app.setEvents([{id: "answer", action: {kind: "FinishAction", message: "Spoken answer"}}, nudge, report, own]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = app.sent().find(event => event.item?.call_id === toolEvent.call_id);
+    expect(JSON.parse(result.item.output)).toMatchObject({status: "answered", answer: "Spoken answer"});
+  });
+
+  it("answers from output after the spoken request's own saved message", async () => {
+    const app = setup();
+    await app.start();
+    app.emit(toolEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    const posted = app.request.mock.calls.find(([call]) => call.method === "POST" && call.path.endsWith("/events"))[0];
+    const own = {id: "own", llm_message: {role: "user", content: posted.body.content}};
+    app.setStatus("finished");
+    app.setEvents([{id: "answer", action: {kind: "FinishAction", message: "Spoken answer"}}, own]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = app.sent().find(event => event.item?.call_id === toolEvent.call_id);
+    expect(JSON.parse(result.item.output)).toMatchObject({status: "answered", answer: "Spoken answer"});
+  });
+
   it("keeps interrupted OpenAI audio silent through late output and track callbacks", async () => {
     const app = setup();
     await app.start();

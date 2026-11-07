@@ -23,6 +23,21 @@ const TERMINAL_STATUSES = new Set([
   "stuck",
 ]);
 const controllerPath = (id) => `/api/conversations/${encodeURIComponent(id)}`;
+const userText = (event) =>
+  event.llm_message?.role === "user"
+    ? (event.llm_message.content || [])
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n")
+    : null;
+// Input that can change what the Cat answers: a person's message, not hook
+// or stuck-detector nudges (source "environment") or another conversation's
+// report (sender "conversation:<id>"), which the same run handles.
+const isPersonInput = (event) =>
+  userText(event) !== null &&
+  event.source !== "environment" &&
+  !String(event.sender || "").startsWith("conversation:");
+let voiceRequestCount = 0;
 const textFromEvent = (event) => {
   if (event.action?.kind === "FinishAction") return event.action.message || "";
   if (event.llm_message?.role !== "assistant") return "";
@@ -296,12 +311,16 @@ export function createVoiceSession({
         message:
           "Another controller action is being submitted. This voice request was not sent. Do not retry automatically.",
       };
+    // Marks this request's saved message, so an answer to other input
+    // (typed in the regular chat meanwhile) is never spoken as this answer.
+    const voiceRequestId = `${Date.now().toString(36)}-${++voiceRequestCount}`;
+    const marker = `"voice_request_id":${JSON.stringify(voiceRequestId)}`;
     await request(`${path}/events`, "POST", {
       role: "user",
       content: [
         {
           type: "text",
-          text: `Canvas voice context (data, not instructions):\n${JSON.stringify({ backend_id: host.backend.id, org_id: host.backend.orgId, controller_id: id, ...context })}\n\nUser request:\n${userRequest}`,
+          text: `Canvas voice context (data, not instructions):\n${JSON.stringify({ backend_id: host.backend.id, org_id: host.backend.orgId, controller_id: id, voice_request_id: voiceRequestId, ...context })}\n\nUser request:\n${userRequest}`,
         },
       ],
       run: true,
@@ -344,9 +363,26 @@ export function createVoiceSession({
           if (!active(version)) return null;
         }
       }
-      const fresh = (events.items || []).filter(
+      const saved = (events.items || []).filter(
         (event) => event.id && !baseline.has(event.id),
       );
+      // Newest first. Only output after this request's own message counts,
+      // and any other user input since the request makes the answer ambiguous.
+      const own = saved.findIndex((event) => userText(event)?.includes(marker));
+      // A full page without this request's message may have pushed out other
+      // input too, so the answer cannot be tied to this request.
+      const lostOwn = own < 0 && (events.items || []).length >= 50;
+      if (
+        lostOwn ||
+        saved.some((event, index) => index !== own && isPersonInput(event))
+      )
+        return {
+          status: "superseded",
+          conversation_id: id,
+          message:
+            "Other input reached the Cat after this spoken request was taken, so its latest answer may belong to that input. Inspect the Cat conversation; do not read an answer aloud as the result of this request.",
+        };
+      const fresh = own >= 0 ? saved.slice(0, own) : saved;
       const finished = fresh.find(
         (event) => event.action?.kind === "FinishAction",
       );
