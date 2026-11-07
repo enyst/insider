@@ -713,6 +713,23 @@
     "zh-CN": "仅显示最近的消息。打开聊天可查看工具、审批和完整历史记录。",
     "zh-TW": "僅顯示最近的訊息。開啟聊天可查看工具、核准和完整歷史紀錄。"
   },
+  "INSIDER_CAT$FROM_CONVERSATION": {
+    "ar": "محادثة أخرى",
+    "ca": "Una altra conversa",
+    "de": "Andere Unterhaltung",
+    "en": "Another conversation",
+    "es": "Otra conversación",
+    "fr": "Autre conversation",
+    "it": "Altra conversazione",
+    "ja": "別の会話",
+    "ko-KR": "다른 대화",
+    "no": "En annen samtale",
+    "pt": "Outra conversa",
+    "tr": "Başka bir konuşma",
+    "uk": "Інша розмова",
+    "zh-CN": "另一个对话",
+    "zh-TW": "另一個對話"
+  },
   "INSIDER_CAT$USER": {
     "ar": "أنت",
     "ca": "Tu",

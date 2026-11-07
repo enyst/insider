@@ -106,18 +106,30 @@ function supportsControllerLaunch(schema) {
   );
 }
 
+// Agent Server marks a message another conversation sent with
+// sender "conversation:<id>" and puts a header for the agent in front of it.
+const SENDER_PREFIX = "conversation:";
+
 function messageText(event) {
   const message = event.llm_message;
   if (message && ["user", "assistant"].includes(message.role)) {
-    const text = (message.content || [])
-      .filter((item) => item.type === "text")
-      .map((item) => item.text)
-      .join("\n");
+    const sender =
+      message.role === "user" &&
+      typeof event.sender === "string" &&
+      event.sender.startsWith(SENDER_PREFIX)
+        ? event.sender.slice(SENDER_PREFIX.length)
+        : "";
+    let parts = (message.content || []).filter((item) => item.type === "text");
+    if (sender && parts.length > 1 && /^\[Sent by /.test(parts[0].text))
+      parts = parts.slice(1);
+    const text = parts.map((item) => item.text).join("\n");
     if (text.trim())
-      return {
-        role: message.role,
-        text: message.role === "user" ? userMessageForDisplay(text) : text,
-      };
+      return sender
+        ? { role: "user", text, sender }
+        : {
+            role: message.role,
+            text: message.role === "user" ? userMessageForDisplay(text) : text,
+          };
   }
   if (
     event.action?.kind === "FinishAction" &&
@@ -824,9 +836,15 @@ export function activate(host) {
         async function readConversationRefs(messages, controllerId) {
           const keys = new Map();
           for (const message of messages)
-            for (const ref of conversationRefs(message.text))
-              if (idKey(ref) !== idKey(controllerId))
+            for (const ref of [
+              ...(message.sender ? [message.sender] : []),
+              ...conversationRefs(message.text),
+            ])
+              if (idKey(ref) !== idKey(controllerId)) {
+                // The latest mention decides which cards fit the limit.
+                keys.delete(idKey(ref));
                 keys.set(idKey(ref), ref);
+              }
           const wanted = [...keys.values()]
             .filter((ref) => !missingRefs.has(idKey(ref)))
             .slice(-REF_LIMIT);
@@ -937,13 +955,25 @@ export function activate(host) {
             for (const message of messages) {
               const row = document.createElement("div");
               row.className = "cat-message";
-              row.dataset.speaker = message.role;
+              row.dataset.speaker = message.sender
+                ? "conversation"
+                : message.role;
               const label = document.createElement("strong");
               label.textContent = t(
-                message.role === "user" ? "user" : "assistant",
+                message.sender
+                  ? "fromConversation"
+                  : message.role === "user"
+                    ? "user"
+                    : "assistant",
               );
               row.append(label, document.createTextNode(message.text));
-              for (const ref of conversationRefs(message.text)) {
+              const rowRefs = new Map();
+              for (const ref of [
+                ...(message.sender ? [message.sender] : []),
+                ...conversationRefs(message.text),
+              ])
+                if (!rowRefs.has(idKey(ref))) rowRefs.set(idKey(ref), ref);
+              for (const ref of rowRefs.values()) {
                 const linked = refs.get(idKey(ref));
                 if (linked) row.append(refCard(linked));
               }

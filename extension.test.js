@@ -320,6 +320,46 @@ describe("Insider Cat work board", () => {
     await waitFor(() => expect(saved).toEqual({ team: "web" }));
   });
 
+  it("labels a message another conversation sent and drops the agent header", async () => {
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return {
+            items: [
+              {
+                sender: `conversation:${worker.id.replace(/-/g, "")}`,
+                llm_message: {
+                  role: "user",
+                  content: [
+                    { type: "text", text: '[Sent by "Lead" (conversation abc), the coordinator of your project, not by the person.]' },
+                    { type: "text", text: `Please summarize the board. I am ${worker.id}.` },
+                  ],
+                },
+              },
+            ],
+          };
+        if (
+          [worker.id, worker.id.replace(/-/g, "")].some(
+            (id) => path === `/api/conversations/${id}`,
+          )
+        )
+          return { ...worker, title: "Lead" };
+      },
+    });
+    await waitFor(() =>
+      expect(app.container.querySelector('.cat-message[data-speaker="conversation"]')).not.toBeNull(),
+    );
+    const row = app.container.querySelector('.cat-message[data-speaker="conversation"]');
+    expect(row.querySelector("strong").textContent).toBe("Another conversation");
+    expect(row.textContent).toContain("Please summarize the board.");
+    expect(row.textContent).not.toContain("[Sent by");
+    await waitFor(() => expect(row.querySelector(".cat-ref")?.textContent).toContain("Lead"));
+    // The sender named again in the text still gets one card.
+    expect(row.querySelectorAll(".cat-ref").length).toBe(1);
+  });
+
   it("shows live cards for conversations the Cat names", async () => {
     const named = {
       ...worker,
