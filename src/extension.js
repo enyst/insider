@@ -6,6 +6,14 @@ import {
 } from "./runtime-context.js";
 import { catPageMarkup, catViewStyles, mountCatVoice } from "./cat-view.js";
 import {
+  ATTENTION_GROUPS,
+  COLLAPSED_GROUPS,
+  belongsToCat,
+  groupByAttention,
+  trackedTags,
+  untrackedTags,
+} from "./attention.js";
+import {
   CONTROLLER_TAGS,
   isController,
   userMessageForDisplay,
@@ -337,6 +345,15 @@ export function activate(host) {
         let timer = null;
         let board = [];
         let cursor = null;
+        let boardScope = "all";
+        const collapsedGroups = new Set(COLLAPSED_GROUPS);
+        const tracking = new Set();
+        const groupCopy = Object.fromEntries(
+          [...ATTENTION_GROUPS.map((g) => g.id), "other"].map((id) => [
+            id,
+            `group${id[0].toUpperCase()}${id.slice(1)}`,
+          ]),
+        );
         let controllers = [];
         let workspaces = [];
         let workspaceDiscoveryReady = false;
@@ -512,73 +529,139 @@ export function activate(host) {
           });
           node.append(title, clear);
         }
+        function renderScope() {
+          const controllerId = state.controller?.id;
+          if (!controllerId) boardScope = "all";
+          action("scope").replaceChildren(
+            option("all", t("scopeAll")),
+            ...(controllerId ? [option("cat", t("scopeCat"))] : []),
+          );
+          action("scope").value = boardScope;
+          action("scope").hidden = !controllerId;
+        }
+        async function setTracked(c, tracked) {
+          const controllerId = state.controller?.id;
+          if (!controllerId || tracking.has(c.id)) return;
+          const tags = tracked
+            ? trackedTags(c.tags, controllerId)
+            : untrackedTags(c.tags);
+          tracking.add(c.id);
+          renderBoard();
+          try {
+            await request(detailPath(c.id), "PATCH", { tags });
+            if (!alive) return;
+            board = board.map((item) =>
+              item.id === c.id ? { ...item, tags } : item,
+            );
+          } catch (error) {
+            notice(t("trackError", { message: errorText(error) }));
+          } finally {
+            tracking.delete(c.id);
+            if (alive) renderBoard();
+          }
+        }
         function renderBoard() {
           if (!alive) return;
+          renderScope();
           const filter = action("search").value.toLowerCase();
           const workspace = action("project").value;
+          const controllerId = state.controller?.id;
           const cards = board.filter(
             (c) =>
               !isController(c) &&
               `${c.title || ""} ${c.id}`.toLowerCase().includes(filter) &&
-              (!workspace || workspaceOf(c) === workspace),
+              (!workspace || workspaceOf(c) === workspace) &&
+              (boardScope !== "cat" || belongsToCat(c, controllerId)),
           );
           const parent = role("cards");
           parent.replaceChildren();
-          for (const c of cards) {
-            const card = document.createElement("article");
-            card.className = `cat-card${state.selected?.id === c.id ? " is-selected" : ""}`;
-            card.dataset.status = c.execution_status || "unknown";
-            const title = document.createElement("div");
-            title.className = "cat-card-title";
-            title.textContent = c.title || c.id;
-            const meta = document.createElement("div");
-            meta.className = "cat-card-meta";
-            const badge = document.createElement("span");
-            badge.className = "cat-badge";
-            badge.textContent = t(
-              EXECUTION_STATUSES.has(c.execution_status)
-                ? c.execution_status
-                : "unknown",
-            );
-            const project = document.createElement("span");
-            project.textContent =
-              workspaceName(workspaceOf(c)) || t("noWorkspace");
-            project.title = workspaceOf(c);
-            meta.append(badge, project);
-            const buttons = document.createElement("div");
-            buttons.className = "cat-controls";
-            const select = document.createElement("button");
-            select.dataset.action = "select-worker";
-            select.textContent = t("select");
-            select.addEventListener("click", () => {
-              state.selected = c;
-              if (
-                !state.controller &&
-                isLocalOnlyRuntime(serverInfo) &&
-                workspaceOf(c)
-              )
-                state.workspace = workspaceOf(c);
-              renderTarget();
-              renderWorkspaces();
+          for (const group of groupByAttention(cards)) {
+            const section = document.createElement("section");
+            section.className = "cat-group";
+            section.dataset.group = group.id;
+            const collapsed = collapsedGroups.has(group.id);
+            const head = document.createElement("button");
+            head.className = "cat-group-head";
+            head.dataset.action = `group-${group.id}`;
+            head.setAttribute("aria-expanded", String(!collapsed));
+            head.textContent = `${t(groupCopy[group.id])} · ${group.items.length}`;
+            head.addEventListener("click", () => {
+              if (collapsedGroups.has(group.id)) collapsedGroups.delete(group.id);
+              else collapsedGroups.add(group.id);
               renderBoard();
-              role("target").scrollIntoView?.({ block: "nearest" });
             });
-            const link = document.createElement("button");
-            link.dataset.action = "open-worker";
-            link.textContent = t("open");
-            link.addEventListener("click", () => open(c.id));
-            buttons.append(select, link);
-            card.append(title, meta, buttons);
-            parent.append(card);
+            section.append(head);
+            parent.append(section);
+            if (!collapsed) for (const c of group.items) section.append(card(c));
           }
           if (!cards.length) {
             const empty = document.createElement("p");
             empty.className = "cat-muted";
-            empty.textContent = t("empty");
+            empty.textContent = t(boardScope === "cat" ? "emptyCat" : "empty");
             parent.append(empty);
           }
           action("load-more").hidden = !cursor;
           action("load-more").disabled = loading;
+        }
+        function card(c) {
+          const controllerId = state.controller?.id;
+          const card = document.createElement("article");
+          card.className = `cat-card${state.selected?.id === c.id ? " is-selected" : ""}`;
+          card.dataset.status = c.execution_status || "unknown";
+          const title = document.createElement("div");
+          title.className = "cat-card-title";
+          title.textContent = c.title || c.id;
+          const meta = document.createElement("div");
+          meta.className = "cat-card-meta";
+          const badge = document.createElement("span");
+          badge.className = "cat-badge";
+          badge.textContent = t(
+            EXECUTION_STATUSES.has(c.execution_status)
+              ? c.execution_status
+              : "unknown",
+          );
+          const project = document.createElement("span");
+          project.textContent =
+            workspaceName(workspaceOf(c)) || t("noWorkspace");
+          project.title = workspaceOf(c);
+          meta.append(badge, project);
+          const buttons = document.createElement("div");
+          buttons.className = "cat-controls";
+          const select = document.createElement("button");
+          select.dataset.action = "select-worker";
+          select.textContent = t("select");
+          select.addEventListener("click", () => {
+            state.selected = c;
+            if (
+              !state.controller &&
+              isLocalOnlyRuntime(serverInfo) &&
+              workspaceOf(c)
+            )
+              state.workspace = workspaceOf(c);
+            renderTarget();
+            renderWorkspaces();
+            renderBoard();
+            role("target").scrollIntoView?.({ block: "nearest" });
+          });
+          const link = document.createElement("button");
+          link.dataset.action = "open-worker";
+          link.textContent = t("open");
+          link.addEventListener("click", () => open(c.id));
+          buttons.append(select, link);
+          if (controllerId) {
+            const tracked = belongsToCat(c, controllerId);
+            const track = document.createElement("button");
+            track.dataset.action = "track-worker";
+            track.textContent = t(tracked ? "untrack" : "track");
+            // Sub-conversations belong to their parent; only tags can move.
+            track.disabled =
+              tracking.has(c.id) ||
+              (tracked && c.tags?.insidercat !== controllerId);
+            track.addEventListener("click", () => void setTracked(c, !tracked));
+            buttons.append(track);
+          }
+          card.append(title, meta, buttons);
+          return card;
         }
         function updateBoardFilters() {
           const selected = action("project").value;
@@ -1045,6 +1128,10 @@ export function activate(host) {
           navigate(NEW_CONTROLLER_PAGE_PATH);
         }
         action("new-cat").addEventListener("click", startNewController);
+        action("scope").addEventListener("change", () => {
+          boardScope = action("scope").value === "cat" ? "cat" : "all";
+          renderBoard();
+        });
         renderControls();
         renderWorkspaces();
         renderTarget();

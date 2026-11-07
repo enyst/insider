@@ -31,6 +31,14 @@ grants or a skill loader. The profile supplies the model, credentials, and
 available tools. The App does not add worker-management tools, shared memory,
 or a scheduler.
 
+Work tracked by a Cat carries `insidercat: <controller ID>` and
+`insiderrole: worker`; the Cat's own sub-conversations count through
+`parent_conversation_id`. The Projects page groups loaded work by execution
+state (needs you, working, finished, idle, other) and can narrow it to one Cat's
+work. Its Track control sends a conversation-metadata `PATCH` that replaces the
+tag set, so it re-sends existing tags. Tracking does not message or run the
+tracked conversation.
+
 ## Durable conversation and selected work
 
 The App uses the normal Agent Server conversation API. Creation supplies the

@@ -49,6 +49,12 @@ dependencies or run a build.
   explicit pagination. Filters apply to loaded conversations; the page shows its
   coverage. Approval requests, errors, paused work, and ended runs have distinct
   labels. An ended run is not a claim that a task succeeded.
+- Group loaded work by what it needs from you: **Needs you** (approval
+  requests, paused, errors, stuck), **Working**, **Finished, ready to check**,
+  and **Idle**, which starts collapsed. Once a Cat is chosen, **This Cat's work**
+  narrows the list to conversations tracked by that Cat: workers it tagged
+  with `insidercat`, ones you added with **Track with Cat**, and its own
+  sub-conversations. Tracking only edits tags; it never messages the work.
 - Select work using its full conversation ID without replacing your draft.
   Opening a conversation stays inside Canvas.
 - Discover saved Cat controllers across all conversation-list pages. A single
@@ -88,7 +94,8 @@ dependencies or run a build.
 
 Selecting a worker provides context to the Cat; it does not send that worker a
 message. Coordination depends on the tools supplied by the chosen profile. This
-App adds no worker dispatcher, scheduler, or shared SmolPaws memory.
+App adds no worker dispatcher, scheduler, or shared SmolPaws memory; the
+skill asks the Cat to tag workers it starts so the page can track them.
 
 Drafts survive navigation while the App remains active. They are not saved
 across browser reloads, App disablement, or backend switches. If a send has an
