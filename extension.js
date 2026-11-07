@@ -162,7 +162,7 @@ ${N}`}],run:!0});let ln=i()+XS;for(;j(w)&&i()<ln;){if(await Xe(),!j(w))return nu
     <div class="cat-voice-actions"><button data-action="${s?"start":"voice-start"}" class="cat-talk"></button><button data-action="mute"></button><button data-action="interrupt"></button><button data-action="end"></button><button data-action="setup" hidden></button>${s?'<button data-action="open"></button>':""}</div>
     <p data-role="voice-help" class="cat-muted" hidden></p>
     <details data-role="transcripts" class="cat-transcripts" hidden><summary></summary><div data-role="transcript-lines"></div></details>`;let c=T=>u.querySelector(`[data-action="${T}"]`),p=T=>u.querySelector(`[data-role="${T}"]`);o&&u.querySelector(".cat-voice-actions").before(o);let d=c(s?"start":"voice-start");d.textContent=t("voiceStart"),d.onclick=i,c("mute").onclick=()=>a.setMuted(!a.getSnapshot().muted),c("interrupt").onclick=()=>a.getSnapshot().speakerSuppressed?a.resumePlayback():a.interrupt(),c("end").textContent=t("voiceEnd"),c("end").onclick=()=>a.end(),c("setup").textContent=t("voiceSetup"),c("setup").onclick=()=>r("/settings/secrets"),s&&(c("open").textContent=t("full"),c("open").onclick=()=>{let T=a.getSnapshot().controllerId||n().controller?.id;T&&r(`/conversations/${encodeURIComponent(T)}`)}),u.querySelector("summary").textContent=t("liveTranscript");let g=Object.fromEntries(["user","assistant"].map(T=>{let I=document.createElement("p"),h=document.createElement("strong");h.textContent=`${t(T)}: `;let f=document.createElement("span");return I.append(h,f),p("transcript-lines").append(I),[T,{line:I,text:f}]})),S=()=>{let T=n(),I=a.getSnapshot(),h=!["idle","error"].includes(I.status),f=T.controllerInvalid||T.controllerStatusUnknown?"attention":xm({voice:I,controller:T.controller,busy:T.busy});u.querySelector(".insider-cat-avatar").dataset.pose=f,p("name").textContent=s&&T.controller?.title||t("cat"),p("name").title=T.controller?.title||t("cat");let m=T.controller?.execution_status,C=["paused","waiting_for_confirmation","error","stuck","deleting"].includes(m),O=I.error?t(I.error,{name:"OPENAI_API_KEY"}):T.controllerInvalid?t("invalidController"):T.controllerStatusUnknown?t("unknown"):C?t(m):f==="working"?t("voiceThinking"):I.speakerSuppressed&&h?t("voiceAudioSuppressed"):f==="speaking"?t("voiceSpeaking"):I.muted&&h?t("voiceMuted"):t({idle:"resting",error:"error",connecting:"voiceConnecting",listening:"voiceListening",thinking:"voiceThinking",speaking:"voiceSpeaking"}[I.status]||"resting");p("voice-status").textContent=O,u.dataset.attention=String(f==="attention"),d.hidden=h,d.disabled=!l(),c("mute").hidden=!h,c("mute").disabled=I.status==="connecting",c("mute").textContent=t(I.muted?"voiceUnmute":"voiceMute"),c("mute").setAttribute("aria-pressed",String(!!I.muted)),c("interrupt").hidden=!h,c("interrupt").disabled=I.status==="connecting",c("interrupt").textContent=t(I.speakerSuppressed?"voiceResumeAudio":"voiceInterrupt"),c("end").hidden=!h,c("setup").hidden=I.error!=="voiceKeyMissing",s&&(c("open").disabled=!(I.controllerId||T.controller?.id));let x=p("voice-help");x.hidden=s||h||!!T.controller&&T.voiceSupported,x.textContent=t(T.voiceSupported?"voiceChoose":"voiceUnavailable",{newCat:t("newCat")});for(let[b,z]of Object.entries(g))z.text.textContent=I.transcripts?.[b]||"",z.line.hidden=!z.text.textContent;p("transcripts").hidden=!Object.values(I.transcripts||{}).some(Boolean)};return e.append(u),S(),{root:u,sync:S}}var Hc=`
-.insider-app,.insider-voice{--cat-bg:var(--oh-surface,#20211f);--cat-line:var(--oh-border,#42443f);--cat-text:var(--oh-foreground,#efeee7);--cat-muted:#b4b7ae;--cat-accent:#cad7b4;--cat-ink:#252e20;color:var(--cat-text);font:14px/1.5 system-ui,sans-serif;color-scheme:dark}
+.insider-app,.insider-voice{--cat-bg:var(--oh-surface,#20211f);--cat-line:var(--oh-border,#42443f);--cat-text:var(--oh-foreground,#efeee7);--cat-muted:light-dark(var(--oh-muted,#675e54),#b4b7ae);--cat-accent:light-dark(var(--oh-accent,#9b4428),#cad7b4);--cat-ink:light-dark(var(--oh-accent-foreground,#fffaf2),#252e20);--cat-accent-hover:light-dark(color-mix(in srgb,var(--cat-accent) 85%,#000),#d7e3c2);--cat-warn:light-dark(var(--oh-feedback-warning,#705515),#f0c697);--cat-error:light-dark(var(--oh-feedback-error,#a12c2a),#f4aaa0);--cat-tint:color-mix(in srgb,var(--cat-accent) 4%,transparent);--cat-wash:color-mix(in srgb,currentColor 3%,transparent);color:var(--cat-text);font:14px/1.5 system-ui,sans-serif}
 .insider-app *,.insider-voice *{box-sizing:border-box}
 .insider-app{width:100%;max-width:1240px;margin-inline:auto;padding:clamp(16px,3vw,36px)}
 .insider-app h1,.insider-app h2,.insider-app p,.insider-voice p{margin:0}
@@ -177,10 +177,10 @@ ${N}`}],run:!0});let ln=i()+XS;for(;j(w)&&i()<ln;){if(await Xe(),!j(w))return nu
 .insider-app .cat-muted,.insider-voice .cat-muted{font-size:12px;color:var(--cat-muted);overflow-wrap:anywhere}
 .insider-app button,.insider-app select,.insider-app input,.insider-app textarea,.insider-voice button{font:inherit;color:inherit;border:1px solid var(--cat-line);border-radius:10px;background:transparent;min-height:44px;padding:9px 12px}
 .insider-app button,.insider-voice button{cursor:pointer;touch-action:manipulation}
-.insider-app button:enabled:hover:not(.cat-primary):not(.cat-talk),.insider-voice button:enabled:hover:not(.cat-talk){border-color:var(--cat-accent);background:#cad7b40a}
+.insider-app button:enabled:hover:not(.cat-primary):not(.cat-talk),.insider-voice button:enabled:hover:not(.cat-talk){border-color:var(--cat-accent);background:var(--cat-tint)}
 .insider-app button:disabled,.insider-voice button:disabled{cursor:default;opacity:.45}
 .insider-app .cat-primary,.insider-app .cat-talk,.insider-voice .cat-talk{background:var(--cat-accent);color:var(--cat-ink);border-color:var(--cat-accent);font-weight:650}
-.insider-app .cat-primary:enabled:hover,.insider-app .cat-talk:enabled:hover,.insider-voice .cat-talk:enabled:hover{background:#d7e3c2;color:var(--cat-ink);border-color:#d7e3c2}
+.insider-app .cat-primary:enabled:hover,.insider-app .cat-talk:enabled:hover,.insider-voice .cat-talk:enabled:hover{background:var(--cat-accent-hover);color:var(--cat-ink);border-color:var(--cat-accent-hover)}
 .insider-app :is(button,input,select,textarea,summary):focus-visible,.insider-voice :is(button,summary):focus-visible{outline:2px solid var(--cat-accent);outline-offset:3px}
 .insider-app [hidden],.insider-voice[hidden],.insider-voice [hidden]{display:none!important}
 .insider-app .cat-controls,.cat-voice-view .cat-voice-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -196,7 +196,7 @@ ${N}`}],run:!0});let ln=i()+XS;for(;j(w)&&i()<ln;){if(await Xe(),!j(w))return nu
 .cat-voice-view .insider-cat-avatar{width:132px;flex:0 0 132px}
 .cat-voice-view .cat-presence-copy{min-width:0}
 .cat-voice-view [data-role=voice-status]{font-size:13px;color:var(--cat-muted);margin-block-start:4px;overflow-wrap:anywhere}
-.cat-voice-view[data-attention=true] [data-role=voice-status]{color:#f0c697}
+.cat-voice-view[data-attention=true] [data-role=voice-status]{color:var(--cat-warn)}
 .cat-voice-view .cat-transcripts{font-size:12px;overflow-wrap:anywhere;color:var(--cat-muted)}
 .cat-voice-view .cat-transcripts summary{cursor:pointer;min-height:32px;align-content:center}
 .cat-voice-view [data-role=transcript-lines]{max-height:140px;overflow:auto;padding-block:8px;display:grid;gap:8px}
@@ -207,7 +207,7 @@ ${N}`}],run:!0});let ln=i()+XS;for(;j(w)&&i()<ln;){if(await Xe(),!j(w))return nu
 .insider-app .cat-history:empty{display:none}
 .insider-app .cat-message{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;padding-inline-end:8px}
 .insider-app .cat-message strong{display:block;font-size:11px;font-weight:600;margin-block-end:5px;color:var(--cat-muted)}
-.insider-app .cat-message[data-speaker=user]{margin-inline-start:28px;border-radius:12px;background:#ffffff07;padding:12px}
+.insider-app .cat-message[data-speaker=user]{margin-inline-start:28px;border-radius:12px;background:var(--cat-wash);padding:12px}
 .insider-app .cat-composer{display:grid;gap:8px;border:1px solid var(--cat-line);border-radius:14px;padding:10px}
 .insider-app .cat-composer:focus-within{border-color:var(--cat-accent)}
 .insider-app textarea{width:100%;min-height:84px;max-height:260px;resize:vertical;border:0;padding:6px;background:transparent}
@@ -227,17 +227,17 @@ ${N}`}],run:!0});let ln=i()+XS;for(;j(w)&&i()<ln;){if(await Xe(),!j(w))return nu
 .insider-app .cat-card-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--cat-muted)}
 .insider-app .cat-card-meta>span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .insider-app .cat-badge::before{content:"";display:inline-block;width:5px;height:5px;margin-inline-end:6px;border-radius:50%;background:currentColor;vertical-align:middle}
-.insider-app .cat-card[data-status=waiting_for_confirmation] .cat-badge{color:#f0c697}
-.insider-app .cat-card:is([data-status=error],[data-status=stuck]) .cat-badge{color:#f4aaa0}
+.insider-app .cat-card[data-status=waiting_for_confirmation] .cat-badge{color:var(--cat-warn)}
+.insider-app .cat-card:is([data-status=error],[data-status=stuck]) .cat-badge{color:var(--cat-error)}
 .insider-app .cat-card[data-status=running] .cat-badge{color:var(--cat-accent)}
 .insider-app .cat-card button{font-size:12px;min-height:40px;padding:7px 10px}
-.insider-app .cat-ref{display:grid;gap:4px;width:100%;margin-block-start:10px;padding:10px 12px;text-align:start;border:1px solid var(--cat-line);border-radius:10px;background:#ffffff05;white-space:normal;font-size:13px;cursor:pointer}
+.insider-app .cat-ref{display:grid;gap:4px;width:100%;margin-block-start:10px;padding:10px 12px;text-align:start;border:1px solid var(--cat-line);border-radius:10px;background:var(--cat-wash);white-space:normal;font-size:13px;cursor:pointer}
 .insider-app .cat-ref:hover{border-color:var(--cat-accent)}
 .insider-app .cat-ref-title{font-weight:550;overflow-wrap:anywhere}
-.insider-app .cat-ref[data-status=waiting_for_confirmation] .cat-badge{color:#f0c697}
-.insider-app .cat-ref:is([data-status=error],[data-status=stuck]) .cat-badge{color:#f4aaa0}
+.insider-app .cat-ref[data-status=waiting_for_confirmation] .cat-badge{color:var(--cat-warn)}
+.insider-app .cat-ref:is([data-status=error],[data-status=stuck]) .cat-badge{color:var(--cat-error)}
 .insider-app .cat-ref[data-status=running] .cat-badge{color:var(--cat-accent)}
-.insider-app .cat-target{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#cad7b40a;border-radius:10px;border-inline-start:2px solid var(--cat-accent);font-size:12px;min-width:0}
+.insider-app .cat-target{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--cat-tint);border-radius:10px;border-inline-start:2px solid var(--cat-accent);font-size:12px;min-width:0}
 .insider-app .cat-target>span{min-width:0;overflow-wrap:anywhere;flex:1}
 .insider-app .cat-target button{font-size:12px;flex-shrink:0}
 .insider-app .cat-notice{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
