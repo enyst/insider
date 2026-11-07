@@ -60,6 +60,8 @@ export function trackedTags(tags, controllerId) {
 export function untrackedTags(tags) {
   const next = { ...(tags || {}) };
   delete next[WORKER_CAT_TAG];
-  if (next.insiderrole === WORKER_ROLE) delete next.insiderrole;
+  // Without a role, a top-level smolpaws:insider conversation reads as a Cat.
+  if (next.insiderrole === WORKER_ROLE && next.smolpaws !== "insider")
+    delete next.insiderrole;
   return next;
 }

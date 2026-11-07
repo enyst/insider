@@ -217,6 +217,76 @@ describe("Insider Cat work board", () => {
     );
   });
 
+  it("tracks from the saved tags, keeps focus, and reports a failed update", async () => {
+    let fail = false;
+    const app = mountApp({
+      request: ({ path, method }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller, worker], next_page_id: null };
+        if (path === `/api/conversations/${worker.id}` && method === "GET")
+          return { ...worker, tags: { team: "web" } };
+        if (method === "PATCH") {
+          if (fail) throw new Error("tag update refused");
+          return { success: true };
+        }
+      },
+    });
+    await waitFor(() => expect(find(app, "track-worker")).not.toBeNull());
+    find(app, "track-worker").focus();
+    click(app, "track-worker");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith({
+        path: `/api/conversations/${worker.id}`,
+        method: "PATCH",
+        body: {
+          tags: {
+            team: "web",
+            insidercat: controller.id,
+            insiderrole: "worker",
+          },
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(find(app, "track-worker").textContent).toBe("Stop tracking"),
+    );
+    expect(document.activeElement).toBe(find(app, "track-worker"));
+
+    fail = true;
+    click(app, "track-worker");
+    await waitFor(() =>
+      expect(
+        app.container.querySelector('[data-role="notice"]').textContent,
+      ).toBe("Couldn't update tracking: tag update refused"),
+    );
+    expect(find(app, "track-worker").textContent).toBe("Stop tracking");
+  });
+
+  it("re-renders tracking for a newly chosen Cat", async () => {
+    const other = {
+      ...controller,
+      id: "66666666-6666-4666-8666-666666666666",
+      title: "Second Cat",
+    };
+    const tracked = { ...worker, tags: { insidercat: controller.id } };
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller, other, tracked], next_page_id: null };
+        if (path === `/api/conversations/${other.id}`) return other;
+      },
+    });
+    await waitFor(() =>
+      expect(find(app, "controller").options.length).toBe(3),
+    );
+    find(app, "controller").value = controller.id;
+    find(app, "controller").dispatchEvent(new Event("change"));
+    expect(find(app, "track-worker").textContent).toBe("Stop tracking");
+    find(app, "controller").value = other.id;
+    find(app, "controller").dispatchEvent(new Event("change"));
+    expect(find(app, "track-worker").textContent).toBe("Track with Cat");
+  });
+
   it("hides the Cat filter until a Cat is chosen", async () => {
     const app = mountApp();
     await waitFor(() => expect(groups(app).length).toBe(1));

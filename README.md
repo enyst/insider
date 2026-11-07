@@ -51,8 +51,8 @@ dependencies or run a build.
   labels. An ended run is not a claim that a task succeeded.
 - Group loaded work by what it needs from you: **Needs you** (approval
   requests, paused, errors, stuck), **Working**, **Finished, ready to check**,
-  and **Idle**, which starts collapsed. Once a Cat is chosen, **This Cat's work**
-  narrows the list to conversations tracked by that Cat: workers it tagged
+  **Idle**, which starts collapsed, and **Other** for any other state. Once a
+  Cat is chosen, **This Cat's work** narrows the list to conversations tracked by that Cat: workers it tagged
   with `insidercat`, ones you added with **Track with Cat**, and its own
   sub-conversations. Tracking only edits tags; it never messages the work.
 - Select work using its full conversation ID without replacing your draft.

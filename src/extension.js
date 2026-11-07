@@ -539,26 +539,41 @@ export function activate(host) {
           action("scope").value = boardScope;
           action("scope").hidden = !controllerId;
         }
-        async function setTracked(c, tracked) {
-          const controllerId = state.controller?.id;
-          if (!controllerId || tracking.has(c.id)) return;
-          const tags = tracked
-            ? trackedTags(c.tags, controllerId)
-            : untrackedTags(c.tags);
+        async function setTracked(c, tracked, controllerId) {
+          if (
+            !controllerId ||
+            state.controller?.id !== controllerId ||
+            tracking.has(c.id)
+          )
+            return;
           tracking.add(c.id);
           renderBoard();
           try {
+            // A tag update replaces the whole set: start from the saved tags.
+            const fresh = await request(detailPath(c.id));
+            if (!alive || state.controller?.id !== controllerId) return;
+            const tags = tracked
+              ? trackedTags(fresh?.tags, controllerId)
+              : untrackedTags(fresh?.tags);
             await request(detailPath(c.id), "PATCH", { tags });
             if (!alive) return;
             board = board.map((item) =>
-              item.id === c.id ? { ...item, tags } : item,
+              item.id === c.id ? { ...item, ...fresh, tags } : item,
             );
           } catch (error) {
             notice(t("trackError", { message: errorText(error) }));
           } finally {
             tracking.delete(c.id);
-            if (alive) renderBoard();
+            if (alive) {
+              renderBoard();
+              restoreFocus(
+                `[data-card="${c.id}"] [data-action="track-worker"]`,
+              );
+            }
           }
+        }
+        function restoreFocus(selector) {
+          root.querySelector(selector)?.focus?.();
         }
         function renderBoard() {
           if (!alive) return;
@@ -582,6 +597,7 @@ export function activate(host) {
             const collapsed = collapsedGroups.has(group.id);
             const head = document.createElement("button");
             head.className = "cat-group-head";
+            head.type = "button";
             head.dataset.action = `group-${group.id}`;
             head.setAttribute("aria-expanded", String(!collapsed));
             head.textContent = `${t(groupCopy[group.id])} · ${group.items.length}`;
@@ -589,6 +605,7 @@ export function activate(host) {
               if (collapsedGroups.has(group.id)) collapsedGroups.delete(group.id);
               else collapsedGroups.add(group.id);
               renderBoard();
+              restoreFocus(`[data-action="group-${group.id}"]`);
             });
             section.append(head);
             parent.append(section);
@@ -608,6 +625,7 @@ export function activate(host) {
           const card = document.createElement("article");
           card.className = `cat-card${state.selected?.id === c.id ? " is-selected" : ""}`;
           card.dataset.status = c.execution_status || "unknown";
+          card.dataset.card = c.id;
           const title = document.createElement("div");
           title.className = "cat-card-title";
           title.textContent = c.title || c.id;
@@ -657,7 +675,10 @@ export function activate(host) {
             track.disabled =
               tracking.has(c.id) ||
               (tracked && c.tags?.insidercat !== controllerId);
-            track.addEventListener("click", () => void setTracked(c, !tracked));
+            track.addEventListener(
+              "click",
+              () => void setTracked(c, !tracked, controllerId),
+            );
             buttons.append(track);
           }
           card.append(title, meta, buttons);
@@ -1105,6 +1126,7 @@ export function activate(host) {
           role("history").replaceChildren();
           rememberController();
           renderControls();
+          renderBoard();
           if (state.controller) {
             void refreshController();
             navigate(controllerPagePath(state.controller.id));
@@ -1125,6 +1147,7 @@ export function activate(host) {
           rememberController();
           renderWorkspaces();
           renderControllerChoices();
+          renderBoard();
           navigate(NEW_CONTROLLER_PAGE_PATH);
         }
         action("new-cat").addEventListener("click", startNewController);

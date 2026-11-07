@@ -65,5 +65,9 @@ describe("Cat tracking tags", () => {
     expect(untrackedTags({ insiderrole: "reviewer", insidercat: cat })).toEqual(
       { insiderrole: "reviewer" },
     );
+    // Dropping the role would make this top-level conversation read as a Cat.
+    expect(
+      untrackedTags({ smolpaws: "insider", insiderrole: "worker", insidercat: cat }),
+    ).toEqual({ smolpaws: "insider", insiderrole: "worker" });
   });
 });
