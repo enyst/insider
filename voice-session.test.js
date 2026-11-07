@@ -74,7 +74,7 @@ function setup(overrides = {}) {
       };
     if (call.method === "DELETE") return { success: true };
     if (call.path.includes("/events/search")) return { items: [...events] };
-    if (call.path.endsWith("/events")) {
+    if (call.path.endsWith("/voice/messages")) {
       executionStatus = "running";
       return { success: true };
     }
@@ -156,7 +156,7 @@ describe("Insider voice lifecycle", () => {
     await app.start();
     app.emit({...toolEvent, response_id: undefined});
     await vi.advanceTimersByTimeAsync(0);
-    expect(app.request.mock.calls.some(([call]) => call.method === "POST" && call.path.endsWith("/events"))).toBe(false);
+    expect(app.request.mock.calls.some(([call]) => call.method === "POST" && call.path.endsWith("/voice/messages"))).toBe(false);
     expect(app.sent().some(event => event.type === "response.create")).toBe(false);
   });
 
@@ -167,7 +167,7 @@ describe("Insider voice lifecycle", () => {
     app.session.noteTypedInput();
     app.emit({...toolEvent, name, response_id: "old", arguments: name === "end_voice_call" ? "{}" : toolEvent.arguments});
     await vi.advanceTimersByTimeAsync(0);
-    expect(app.request.mock.calls.some(([call]) => call.method === "POST" && call.path.endsWith("/events"))).toBe(false);
+    expect(app.request.mock.calls.some(([call]) => call.method === "POST" && call.path.endsWith("/voice/messages"))).toBe(false);
     expect(track.stop).not.toHaveBeenCalled();
     expect(app.sent().some(event => event.type === "response.create")).toBe(false);
   });
@@ -296,7 +296,7 @@ describe("Insider voice lifecycle", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(app.sent().some(event => event.type === "response.create")).toBe(false);
     expect(app.sent().find(event => event.item?.call_id === toolEvent.call_id)).toBeTruthy();
-    expect(app.request.mock.calls.filter(([call]) => call.method === "POST" && call.path.endsWith("/events"))).toHaveLength(1);
+    expect(app.request.mock.calls.filter(([call]) => call.method === "POST" && call.path.endsWith("/voice/messages"))).toHaveLength(1);
     expect(app.audio.muted).toBe(true);
   });
 
@@ -379,7 +379,7 @@ describe("Insider voice lifecycle", () => {
     });
     expect(
       app.request.mock.calls.some(
-        ([call]) => call.path.endsWith("/events") && call.method === "POST",
+        ([call]) => call.path.endsWith("/voice/messages") && call.method === "POST",
       ),
     ).toBe(false);
     app.session.end();
@@ -404,7 +404,7 @@ describe("Insider voice lifecycle", () => {
     });
     expect(
       app.request.mock.calls.some(
-        ([call]) => call.path.endsWith("/events") && call.method === "POST",
+        ([call]) => call.path.endsWith("/voice/messages") && call.method === "POST",
       ),
     ).toBe(false);
   });
@@ -429,7 +429,7 @@ describe("Insider voice lifecycle", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(
       app.request.mock.calls.some(
-        ([call]) => call.path.endsWith("/events") && call.method === "POST",
+        ([call]) => call.path.endsWith("/voice/messages") && call.method === "POST",
       ),
     ).toBe(false);
     const output = app
@@ -456,7 +456,7 @@ describe("Insider voice lifecycle", () => {
     });
     expect(
       app.request.mock.calls.filter(
-        ([call]) => call.path.endsWith("/events") && call.method === "POST",
+        ([call]) => call.path.endsWith("/voice/messages") && call.method === "POST",
       ),
     ).toHaveLength(1);
     const rejected = app
@@ -534,7 +534,7 @@ describe("Insider voice lifecycle", () => {
     });
     expect(
       app.request.mock.calls.filter(
-        ([call]) => call.path.endsWith("/events") && call.method === "POST",
+        ([call]) => call.path.endsWith("/voice/messages") && call.method === "POST",
       ),
     ).toHaveLength(1);
     app.session.end();
@@ -640,6 +640,46 @@ describe("Insider voice lifecycle", () => {
     });
   });
 
+  it.each([
+    [409, "waiting_for_confirmation", "waiting_for_confirmation"],
+    [409, "conversation_already_running", "busy"],
+    [429, "Server run capacity is full; not saved", "busy"],
+    [404, "Not Found", "unsupported"],
+  ])(
+    "reports a server admission refusal (%i %s) as not sent and never polls for an answer",
+    async (status, detail, reported) => {
+      const app = setup({
+        request: (call) => {
+          if (call.method === "POST" && call.path.endsWith("/voice/messages"))
+            throw Object.assign(new Error("refused"), {
+              status,
+              response: { detail },
+            });
+          return undefined;
+        },
+      });
+      await app.start();
+      app.emit(toolEvent);
+      await vi.advanceTimersByTimeAsync(0);
+      const output = app
+        .sent()
+        .find((event) => event.type === "conversation.item.create");
+      expect(JSON.parse(output.item.output)).toMatchObject({
+        status: reported,
+        sent: false,
+      });
+      const before = app.request.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(app.request.mock.calls.length).toBe(before);
+      expect(
+        app.request.mock.calls.filter(
+          ([call]) =>
+            call.method === "POST" && call.path.endsWith("/voice/messages"),
+        ),
+      ).toHaveLength(1);
+    },
+  );
+
   it("sends a tool request once and speaks only a newly saved controller answer", async () => {
     const app = setup();
     await app.start();
@@ -647,11 +687,11 @@ describe("Insider voice lifecycle", () => {
     app.emit(toolEvent);
     await vi.advanceTimersByTimeAsync(0);
     const mutations = app.request.mock.calls.filter(
-      ([call]) => call.path.endsWith("/events") && call.method === "POST",
+      ([call]) => call.path.endsWith("/voice/messages") && call.method === "POST",
     );
     expect(mutations).toHaveLength(1);
-    expect(mutations[0][0].body).toMatchObject({ role: "user", run: true });
-    expect(mutations[0][0].body.content[0].text).toContain("worker-b");
+    expect(Object.keys(mutations[0][0].body)).toEqual(["text"]);
+    expect(mutations[0][0].body.text).toContain("worker-b");
     await vi.advanceTimersByTimeAsync(1000);
     expect(
       app.sent().some((event) => event.type === "conversation.item.create"),
@@ -903,7 +943,7 @@ describe("Insider voice lifecycle", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(
       app.request.mock.calls.some(
-        ([call]) => call.path.endsWith("/events") && call.method === "POST",
+        ([call]) => call.path.endsWith("/voice/messages") && call.method === "POST",
       ),
     ).toBe(false);
   });
@@ -920,7 +960,7 @@ describe("Insider voice lifecycle", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(
       app.request.mock.calls.some(
-        ([call]) => call.path.endsWith("/events") && call.method === "POST",
+        ([call]) => call.path.endsWith("/voice/messages") && call.method === "POST",
       ),
     ).toBe(false);
     const output = app

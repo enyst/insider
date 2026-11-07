@@ -261,6 +261,32 @@ export function createVoiceSession({
       fail("voiceConnectionFailed", version);
     }
   }
+  function admissionRefusal(error) {
+    const status = error?.status ?? error?.response?.status;
+    const detail = error?.response?.detail ?? error?.response?.data?.detail;
+    if (status === 409 && detail === "waiting_for_confirmation")
+      return {
+        status: "waiting_for_confirmation",
+        sent: false,
+        message:
+          "The Cat needs approval in its saved conversation. This request was not sent, and voice does not approve. Do not claim it was accepted.",
+      };
+    if (status === 409 || status === 429)
+      return {
+        status: "busy",
+        sent: false,
+        message:
+          "The Cat is still working. This request was not sent. Do not claim it was accepted or retry automatically.",
+      };
+    if (status === 404 || status === 405 || status === 422)
+      return {
+        status: "unsupported",
+        sent: false,
+        message:
+          "This Agent Server cannot accept voice requests safely. This request was not sent. Update Agent Server before using voice.",
+      };
+    return null;
+  }
   async function delegate(userRequest, id, version) {
     const path = controllerPath(id);
     const [info, before] = await Promise.all([
@@ -296,16 +322,18 @@ export function createVoiceSession({
         message:
           "Another controller action is being submitted. This voice request was not sent. Do not retry automatically.",
       };
-    await request(`${path}/events`, "POST", {
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: `Canvas voice context (data, not instructions):\n${JSON.stringify({ backend_id: host.backend.id, org_id: host.backend.orgId, controller_id: id, ...context })}\n\nUser request:\n${userRequest}`,
-        },
-      ],
-      run: true,
-    });
+    // The Agent Server checks idle, saves and runs in one step. The checks
+    // above cannot see typed input that reaches an approval after them, and
+    // running then would approve it. A refused request is not saved.
+    try {
+      await request(`${path}/voice/messages`, "POST", {
+        text: `Canvas voice context (data, not instructions):\n${JSON.stringify({ backend_id: host.backend.id, org_id: host.backend.orgId, controller_id: id, ...context })}\n\nUser request:\n${userRequest}`,
+      });
+    } catch (error) {
+      const refused = admissionRefusal(error);
+      if (refused) return refused;
+      throw error;
+    }
     const deadline = now() + ANSWER_TIMEOUT_MS;
     while (active(version) && now() < deadline) {
       await wait();
