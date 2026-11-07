@@ -9,6 +9,7 @@ import {
   ATTENTION_GROUPS,
   COLLAPSED_GROUPS,
   REACTION_EMOJI,
+  askOf,
   belongsToCat,
   conversationRefs,
   foldReactions,
@@ -690,6 +691,12 @@ export function activate(host) {
             workspaceName(workspaceOf(c)) || t("noWorkspace");
           project.title = workspaceOf(c);
           meta.append(badge, project);
+          const ask = askOf(c);
+          const askLine = document.createElement("div");
+          if (ask) {
+            askLine.className = "cat-card-ask";
+            askLine.textContent = ask;
+          }
           const buttons = document.createElement("div");
           buttons.className = "cat-controls";
           const select = document.createElement("button");
@@ -744,7 +751,7 @@ export function activate(host) {
             );
             buttons.append(track);
           }
-          card.append(title, meta, buttons);
+          card.append(title, meta, ...(ask ? [askLine] : []), buttons);
           return card;
         }
         function updateBoardFilters() {

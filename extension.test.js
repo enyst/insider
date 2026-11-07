@@ -177,6 +177,25 @@ describe("Insider Cat work board", () => {
     expect(groups(app)[2]).toEqual(["idle", [idle.title]]);
   });
 
+  it("shows what an asking conversation needs on its card", async () => {
+    const asking = {
+      ...idle,
+      execution_status: "finished",
+      tags: { turn: "asked", ask: "Keep the redirects or remove them?" },
+    };
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [asking, running], next_page_id: null };
+      },
+    });
+    await waitFor(() => expect(groups(app).length).toBe(2));
+    expect(groups(app)[0]).toEqual(["needsYou", [asking.title]]);
+    const cardAsk = app.container.querySelector(".cat-card-ask");
+    expect(cardAsk.textContent).toBe("Keep the redirects or remove them?");
+    expect(app.container.querySelectorAll(".cat-card-ask").length).toBe(1);
+  });
+
   it("filters to the Cat's work and tracks a conversation with the Cat", async () => {
     const app = mountApp({
       request: ({ path, method }) => {
@@ -276,9 +295,7 @@ describe("Insider Cat work board", () => {
         if (path === `/api/conversations/${other.id}`) return other;
       },
     });
-    await waitFor(() =>
-      expect(find(app, "controller").options.length).toBe(3),
-    );
+    await waitFor(() => expect(find(app, "controller").options.length).toBe(3));
     find(app, "controller").value = controller.id;
     find(app, "controller").dispatchEvent(new Event("change"));
     expect(find(app, "track-worker").textContent).toBe("Stop tracking");
@@ -292,7 +309,10 @@ describe("Insider Cat work board", () => {
     const app = mountApp({
       request: ({ path, method, body }) => {
         if (path.startsWith("/api/conversations/search"))
-          return { items: [{ ...worker, execution_status: "finished", tags: saved }], next_page_id: null };
+          return {
+            items: [{ ...worker, execution_status: "finished", tags: saved }],
+            next_page_id: null,
+          };
         if (path === `/api/conversations/${worker.id}` && method === "GET")
           return { ...worker, execution_status: "finished", tags: saved };
         if (method === "PATCH") {
@@ -301,7 +321,9 @@ describe("Insider Cat work board", () => {
         }
       },
     });
-    await waitFor(() => expect(groups(app)).toEqual([["finished", [worker.title]]]));
+    await waitFor(() =>
+      expect(groups(app)).toEqual([["finished", [worker.title]]]),
+    );
     click(app, "resolve-worker");
     await waitFor(() =>
       expect(app.request).toHaveBeenCalledWith({
@@ -321,47 +343,69 @@ describe("Insider Cat work board", () => {
   });
 
   it.each([
-    ['[Sent by "Lead" (conversation abc), the coordinator of your project, not by the person.]', "[Sent by"],
-    ['[Update from "Lead" (conversation abc), a conversation in your project, not from the person. It finished its turn; its final message follows.]', "[Update from"],
-  ])("labels a message another conversation sent and drops the agent header %#", async (header, prefix) => {
-    const app = mountApp({
-      request: ({ path }) => {
-        if (path.startsWith("/api/conversations/search"))
-          return { items: [controller], next_page_id: null };
-        if (path.includes("/events/search"))
-          return {
-            items: [
-              {
-                sender: `conversation:${worker.id.replace(/-/g, "")}`,
-                llm_message: {
-                  role: "user",
-                  content: [
-                    { type: "text", text: header },
-                    { type: "text", text: `Please summarize the board. I am ${worker.id}.` },
-                  ],
+    [
+      '[Sent by "Lead" (conversation abc), the coordinator of your project, not by the person.]',
+      "[Sent by",
+    ],
+    [
+      '[Update from "Lead" (conversation abc), a conversation in your project, not from the person. It finished its turn; its final message follows.]',
+      "[Update from",
+    ],
+  ])(
+    "labels a message another conversation sent and drops the agent header %#",
+    async (header, prefix) => {
+      const app = mountApp({
+        request: ({ path }) => {
+          if (path.startsWith("/api/conversations/search"))
+            return { items: [controller], next_page_id: null };
+          if (path.includes("/events/search"))
+            return {
+              items: [
+                {
+                  sender: `conversation:${worker.id.replace(/-/g, "")}`,
+                  llm_message: {
+                    role: "user",
+                    content: [
+                      { type: "text", text: header },
+                      {
+                        type: "text",
+                        text: `Please summarize the board. I am ${worker.id}.`,
+                      },
+                    ],
+                  },
                 },
-              },
-            ],
-          };
-        if (
-          [worker.id, worker.id.replace(/-/g, "")].some(
-            (id) => path === `/api/conversations/${id}`,
+              ],
+            };
+          if (
+            [worker.id, worker.id.replace(/-/g, "")].some(
+              (id) => path === `/api/conversations/${id}`,
+            )
           )
-        )
-          return { ...worker, title: "Lead" };
-      },
-    });
-    await waitFor(() =>
-      expect(app.container.querySelector('.cat-message[data-speaker="conversation"]')).not.toBeNull(),
-    );
-    const row = app.container.querySelector('.cat-message[data-speaker="conversation"]');
-    expect(row.querySelector("strong").textContent).toBe("Another conversation");
-    expect(row.textContent).toContain("Please summarize the board.");
-    expect(row.textContent).not.toContain(prefix);
-    await waitFor(() => expect(row.querySelector(".cat-ref")?.textContent).toContain("Lead"));
-    // The sender named again in the text still gets one card.
-    expect(row.querySelectorAll(".cat-ref").length).toBe(1);
-  });
+            return { ...worker, title: "Lead" };
+        },
+      });
+      await waitFor(() =>
+        expect(
+          app.container.querySelector(
+            '.cat-message[data-speaker="conversation"]',
+          ),
+        ).not.toBeNull(),
+      );
+      const row = app.container.querySelector(
+        '.cat-message[data-speaker="conversation"]',
+      );
+      expect(row.querySelector("strong").textContent).toBe(
+        "Another conversation",
+      );
+      expect(row.textContent).toContain("Please summarize the board.");
+      expect(row.textContent).not.toContain(prefix);
+      await waitFor(() =>
+        expect(row.querySelector(".cat-ref")?.textContent).toContain("Lead"),
+      );
+      // The sender named again in the text still gets one card.
+      expect(row.querySelectorAll(".cat-ref").length).toBe(1);
+    },
+  );
 
   it("asks again for a live card after a transient error when the person refreshes", async () => {
     let failures = 1;
@@ -372,23 +416,36 @@ describe("Insider Cat work board", () => {
         if (path.includes("/events/search"))
           return {
             items: [
-              { id: "a1", llm_message: { role: "assistant", content: [{ type: "text", text: `Started ${worker.id}.` }] } },
+              {
+                id: "a1",
+                llm_message: {
+                  role: "assistant",
+                  content: [{ type: "text", text: `Started ${worker.id}.` }],
+                },
+              },
             ],
           };
         if (path === `/api/conversations/${worker.id}`) {
           if (failures-- > 0)
-            throw Object.assign(new Error("HTTP request failed (503 Service Unavailable)"), { status: 503 });
+            throw Object.assign(
+              new Error("HTTP request failed (503 Service Unavailable)"),
+              { status: 503 },
+            );
           return { ...worker, title: "Back again" };
         }
       },
     });
     const reads = () =>
-      app.request.mock.calls.filter(([call]) => call.path === `/api/conversations/${worker.id}`).length;
+      app.request.mock.calls.filter(
+        ([call]) => call.path === `/api/conversations/${worker.id}`,
+      ).length;
     await waitFor(() => expect(reads()).toBe(1));
     expect(app.container.querySelector(".cat-ref")).toBeNull();
     click(app, "refresh");
     await waitFor(() =>
-      expect(app.container.querySelector(".cat-ref")?.textContent).toContain("Back again"),
+      expect(app.container.querySelector(".cat-ref")?.textContent).toContain(
+        "Back again",
+      ),
     );
   });
 
@@ -400,14 +457,59 @@ describe("Insider Cat work board", () => {
         if (path.includes("/events/search"))
           return {
             items: [
-              { kind: "ReactionEvent", target_event_id: "f1", emoji: "tada", source: "agent", removed: false },
-              { kind: "ReactionEvent", target_event_id: "f1", emoji: "tada", source: "user", removed: false },
-              { id: "f1", action: { kind: "FinishAction", message: "All finished." } },
-              { kind: "ReactionEvent", target_event_id: "u1", emoji: "eyes", source: "agent", removed: true },
-              { kind: "ReactionEvent", target_event_id: "a1", emoji: "+1", source: "user", removed: false },
-              { id: "a1", llm_message: { role: "assistant", content: [{ type: "text", text: "Done." }] } },
-              { kind: "ReactionEvent", target_event_id: "u1", emoji: "eyes", source: "agent", removed: false },
-              { id: "u1", llm_message: { role: "user", content: [{ type: "text", text: "Check the board." }] } },
+              {
+                kind: "ReactionEvent",
+                target_event_id: "f1",
+                emoji: "tada",
+                source: "agent",
+                removed: false,
+              },
+              {
+                kind: "ReactionEvent",
+                target_event_id: "f1",
+                emoji: "tada",
+                source: "user",
+                removed: false,
+              },
+              {
+                id: "f1",
+                action: { kind: "FinishAction", message: "All finished." },
+              },
+              {
+                kind: "ReactionEvent",
+                target_event_id: "u1",
+                emoji: "eyes",
+                source: "agent",
+                removed: true,
+              },
+              {
+                kind: "ReactionEvent",
+                target_event_id: "a1",
+                emoji: "+1",
+                source: "user",
+                removed: false,
+              },
+              {
+                id: "a1",
+                llm_message: {
+                  role: "assistant",
+                  content: [{ type: "text", text: "Done." }],
+                },
+              },
+              {
+                kind: "ReactionEvent",
+                target_event_id: "u1",
+                emoji: "eyes",
+                source: "agent",
+                removed: false,
+              },
+              {
+                id: "u1",
+                llm_message: {
+                  role: "user",
+                  content: [{ type: "text", text: "Check the board." }],
+                },
+              },
             ],
           };
       },
@@ -415,7 +517,8 @@ describe("Insider Cat work board", () => {
     await waitFor(() =>
       expect(app.container.querySelectorAll(".cat-message").length).toBe(3),
     );
-    const [asked, answered, finished] = app.container.querySelectorAll(".cat-message");
+    const [asked, answered, finished] =
+      app.container.querySelectorAll(".cat-message");
     // Newest first from the API: the eyes reaction was later removed.
     expect(asked.querySelector(".cat-reactions")).toBeNull();
     const chip = answered.querySelector(".cat-reaction");
@@ -459,7 +562,10 @@ describe("Insider Cat work board", () => {
         if (path === `/api/conversations/${worker.id.replace(/-/g, "")}`)
           return named;
         if (path === "/api/conversations/99999999-9999-4999-8999-999999999999")
-          throw Object.assign(new Error("HTTP request failed (404 Not Found)"), { status: 404 });
+          throw Object.assign(
+            new Error("HTTP request failed (404 Not Found)"),
+            { status: 404 },
+          );
       },
     });
     await waitFor(() =>
@@ -477,9 +583,13 @@ describe("Insider Cat work board", () => {
       app.request.mock.calls.filter(([call]) => call.path === path).length;
     const missing = "/api/conversations/99999999-9999-4999-8999-999999999999";
     // The Cat's own ID (written without dashes) is not fetched as a card.
-    expect(reads(`/api/conversations/${controller.id.replace(/-/g, "")}`)).toBe(0);
+    expect(reads(`/api/conversations/${controller.id.replace(/-/g, "")}`)).toBe(
+      0,
+    );
     expect(reads(missing)).toBe(1);
-    const namedReads = reads(`/api/conversations/${worker.id.replace(/-/g, "")}`);
+    const namedReads = reads(
+      `/api/conversations/${worker.id.replace(/-/g, "")}`,
+    );
     click(app, "refresh");
     await waitFor(() =>
       expect(
