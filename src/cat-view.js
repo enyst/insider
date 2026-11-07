@@ -196,6 +196,10 @@ export const catViewStyles = `
 .insider-app .cat-message{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;padding-inline-end:8px}
 .insider-app .cat-message strong{display:block;font-size:11px;font-weight:600;margin-block-end:5px;color:var(--cat-muted)}
 .insider-app .cat-message[data-speaker=user]{margin-inline-start:28px;border-radius:12px;background:var(--cat-wash);padding:12px}
+.insider-app .cat-reactions{display:flex;gap:4px;flex-wrap:wrap;margin-block-start:6px;white-space:normal}
+.insider-app .cat-reaction{display:inline-flex;align-items:center;min-height:24px;padding:0 7px;border:1px solid var(--cat-line);border-radius:999px;background:var(--cat-wash);font-size:13px;line-height:1;animation:cat-fade-in .2s ease-out}
+@keyframes cat-fade-in{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.insider-app .cat-reaction{animation:none}}
 .insider-app .cat-composer{display:grid;gap:8px;border:1px solid var(--cat-line);border-radius:14px;padding:10px}
 .insider-app .cat-composer:focus-within{border-color:var(--cat-accent)}
 .insider-app textarea{width:100%;min-height:84px;max-height:260px;resize:vertical;border:0;padding:6px;background:transparent}

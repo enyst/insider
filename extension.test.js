@@ -360,6 +360,34 @@ describe("Insider Cat work board", () => {
     expect(row.querySelectorAll(".cat-ref").length).toBe(1);
   });
 
+  it("shows reaction chips on the message they target", async () => {
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return {
+            items: [
+              { kind: "ReactionEvent", target_event_id: "u1", emoji: "eyes", source: "agent", removed: true },
+              { kind: "ReactionEvent", target_event_id: "a1", emoji: "+1", source: "user", removed: false },
+              { id: "a1", llm_message: { role: "assistant", content: [{ type: "text", text: "Done." }] } },
+              { kind: "ReactionEvent", target_event_id: "u1", emoji: "eyes", source: "agent", removed: false },
+              { id: "u1", llm_message: { role: "user", content: [{ type: "text", text: "Check the board." }] } },
+            ],
+          };
+      },
+    });
+    await waitFor(() =>
+      expect(app.container.querySelectorAll(".cat-message").length).toBe(2),
+    );
+    const [asked, answered] = app.container.querySelectorAll(".cat-message");
+    // Newest first from the API: the eyes reaction was later removed.
+    expect(asked.querySelector(".cat-reactions")).toBeNull();
+    const chip = answered.querySelector(".cat-reaction");
+    expect(chip.textContent).toBe("👍");
+    expect(chip.title).toBe("You");
+  });
+
   it("shows live cards for conversations the Cat names", async () => {
     const named = {
       ...worker,

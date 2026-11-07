@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  foldReactions,
   belongsToCat,
   conversationRefs,
   relativeAge,
@@ -120,5 +121,26 @@ describe("conversation references", () => {
     expect(relativeAge("2026-11-07T09:00:00Z", now, "en")).toBe("3h ago");
     expect(relativeAge("not a date", now, "en")).toBe("");
     expect(relativeAge("2026-11-07T12:02:00Z", now, "en")).toBe("now");
+  });
+});
+
+describe("foldReactions", () => {
+  const r = (target_event_id, emoji, source, removed = false) => ({
+    kind: "ReactionEvent", target_event_id, emoji, source, removed,
+  });
+  it("keeps the latest event per target, emoji and source", () => {
+    const folded = foldReactions([
+      r("m1", "eyes", "agent"),
+      r("m1", "+1", "user"),
+      r("m1", "eyes", "agent", true),
+      r("m1", "+1", "agent"),
+      r("m2", "eyes", "agent", true),
+      r("m2", "eyes", "agent"),
+      r("m3", "rocket", "agent"),
+      { kind: "MessageEvent", id: "m1" },
+    ]);
+    expect(folded.get("m1")).toEqual([{ emoji: "+1", sources: ["user", "agent"] }]);
+    expect(folded.get("m2")).toEqual([{ emoji: "eyes", sources: ["agent"] }]);
+    expect(folded.has("m3")).toBe(false);
   });
 });

@@ -8,8 +8,10 @@ import { catPageMarkup, catViewStyles, mountCatVoice } from "./cat-view.js";
 import {
   ATTENTION_GROUPS,
   COLLAPSED_GROUPS,
+  REACTION_EMOJI,
   belongsToCat,
   conversationRefs,
+  foldReactions,
   groupByAttention,
   groupFor,
   idKey,
@@ -125,8 +127,9 @@ function messageText(event) {
     const text = parts.map((item) => item.text).join("\n");
     if (text.trim())
       return sender
-        ? { role: "user", text, sender }
+        ? { id: event.id, role: "user", text, sender }
         : {
+            id: event.id,
             role: message.role,
             text: message.role === "user" ? userMessageForDisplay(text) : text,
           };
@@ -135,7 +138,7 @@ function messageText(event) {
     event.action?.kind === "FinishAction" &&
     typeof event.action.message === "string"
   ) {
-    return { role: "assistant", text: event.action.message };
+    return { id: event.id, role: "assistant", text: event.action.message };
   }
   return null;
 }
@@ -933,10 +936,9 @@ export function activate(host) {
             state.controllerInvalid = false;
             state.controllerStatusUnknown = false;
             state.controller = info;
-            const messages = [...(events.items || [])]
-              .reverse()
-              .map(messageText)
-              .filter(Boolean);
+            const chronological = [...(events.items || [])].reverse();
+            const messages = chronological.map(messageText).filter(Boolean);
+            const reactions = foldReactions(chronological);
             const refs = await readConversationRefs(messages, id);
             if (
               !alive ||
@@ -967,6 +969,26 @@ export function activate(host) {
                     : "assistant",
               );
               row.append(label, document.createTextNode(message.text));
+              const chips = message.id && reactions.get(message.id);
+              if (chips?.length) {
+                const strip = document.createElement("div");
+                strip.className = "cat-reactions";
+                for (const chip of chips) {
+                  const item = document.createElement("span");
+                  item.className = "cat-reaction";
+                  item.dataset.emoji = chip.emoji;
+                  item.textContent = REACTION_EMOJI[chip.emoji];
+                  item.title = chip.sources
+                    .map((source) => t(source === "user" ? "user" : "assistant"))
+                    .join(", ");
+                  item.setAttribute(
+                    "aria-label",
+                    `${chip.emoji.replace(/_/g, " ")}: ${item.title}`,
+                  );
+                  strip.append(item);
+                }
+                row.append(strip);
+              }
               const rowRefs = new Map();
               for (const ref of [
                 ...(message.sender ? [message.sender] : []),
