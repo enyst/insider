@@ -730,6 +730,23 @@
     "zh-CN": "另一个对话",
     "zh-TW": "另一個對話"
   },
+  "INSIDER_CAT$YOU_IN_CONVERSATION": {
+    "ar": "أنت، في محادثة أخرى",
+    "ca": "Tu, en una altra conversa",
+    "de": "Du, in einer anderen Unterhaltung",
+    "en": "You, in another conversation",
+    "es": "Tú, en otra conversación",
+    "fr": "Vous, dans une autre conversation",
+    "it": "Tu, in un'altra conversazione",
+    "ja": "あなた（別の会話で）",
+    "ko-KR": "나, 다른 대화에서",
+    "no": "Du, i en annen samtale",
+    "pt": "Você, em outra conversa",
+    "tr": "Sen, başka bir konuşmada",
+    "uk": "Ви, в іншій розмові",
+    "zh-CN": "你（在另一个对话中）",
+    "zh-TW": "你（在另一個對話中）"
+  },
   "INSIDER_CAT$USER": {
     "ar": "أنت",
     "ca": "Tu",

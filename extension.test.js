@@ -346,14 +346,26 @@ describe("Insider Cat work board", () => {
     [
       '[Sent by "Lead" (conversation abc), the coordinator of your project, not by the person.]',
       "[Sent by",
+      "Another conversation",
     ],
     [
       '[Update from "Lead" (conversation abc), a conversation in your project, not from the person. It finished its turn; its final message follows.]',
       "[Update from",
+      "Another conversation",
+    ],
+    [
+      '[Reply in "Lead" (conversation abc), a conversation in your project. Its final reply to the person follows.]',
+      "[Reply in",
+      "Another conversation",
+    ],
+    [
+      '[Message from the person in "Lead" (conversation abc), a conversation in your project. For your awareness: that conversation already has it and works on it, so do not forward or repeat it. The person\'s words follow.]',
+      "[Message from the person",
+      "You, in another conversation",
     ],
   ])(
     "labels a message another conversation sent and drops the agent header %#",
-    async (header, prefix) => {
+    async (header, prefix, label) => {
       const app = mountApp({
         request: ({ path }) => {
           if (path.startsWith("/api/conversations/search"))
@@ -394,9 +406,7 @@ describe("Insider Cat work board", () => {
       const row = app.container.querySelector(
         '.cat-message[data-speaker="conversation"]',
       );
-      expect(row.querySelector("strong").textContent).toBe(
-        "Another conversation",
-      );
+      expect(row.querySelector("strong").textContent).toBe(label);
       expect(row.textContent).toContain("Please summarize the board.");
       expect(row.textContent).not.toContain(prefix);
       await waitFor(() =>

@@ -89,6 +89,15 @@ your turn if nothing needs doing. For more than the final message, use
 (`GET /api/projects/{id}/conversations/{cid}/messages`) before the full event
 history.
 
+The backend also copies into your conversation, without starting a turn, what
+the user writes in a project conversation ("[Message from the person in ...]")
+and that conversation's final reply to it ("[Reply in ...]"). These keep you
+aware; they are not requests to you. That conversation already has the
+message and works on it, so do not forward it, repeat it to the user, or
+start parallel work on it. Use it to keep your picture current: drop or adjust
+instructions it overrides, and mention it only when the user asks or it
+changes what you were about to do.
+
 Continue an existing worker when the user corrects, resumes, or extends its task.
 Create a new worker for a distinct task the user asks you to start. Send a clear,
 self-contained instruction with the needed context; do not assume the worker
