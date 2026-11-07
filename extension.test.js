@@ -257,7 +257,7 @@ describe("Insider Cat work board", () => {
     await waitFor(() =>
       expect(
         app.container.querySelector('[data-role="notice"]').textContent,
-      ).toBe("Couldn't update this conversation: tag update refused"),
+      ).toBe("Could not update this conversation: tag update refused"),
     );
     expect(find(app, "track-worker").textContent).toBe("Stop tracking");
   });
@@ -310,8 +310,9 @@ describe("Insider Cat work board", () => {
         body: { tags: { team: "web", resolved: "user" } },
       }),
     );
-    // Resolved starts collapsed; its toggle keeps focus for keyboard users.
+    // Resolved starts collapsed; focus follows the card to its group toggle.
     await waitFor(() => expect(groups(app)).toEqual([["resolved", []]]));
+    expect(document.activeElement).toBe(find(app, "group-resolved"));
     find(app, "group-resolved").click();
     expect(document.activeElement).toBe(find(app, "group-resolved"));
     expect(find(app, "resolve-worker").textContent).toBe("Reopen");
@@ -339,7 +340,7 @@ describe("Insider Cat work board", () => {
                   content: [
                     {
                       type: "text",
-                      text: `Started ${worker.id.replace(/-/g, "")} and checked myself (${controller.id}); 99999999-9999-4999-8999-999999999999 is gone.`,
+                      text: `Started ${worker.id.replace(/-/g, "")} and checked myself (${controller.id.replace(/-/g, "")}); 99999999-9999-4999-8999-999999999999 is gone.`,
                     },
                   ],
                 },
@@ -363,9 +364,53 @@ describe("Insider Cat work board", () => {
     expect(app.host.navigate).toHaveBeenCalledWith(
       `/conversations/${encodeURIComponent(worker.id)}`,
     );
-    expect(
-      app.request.mock.calls.some(([call]) => call.path === `/api/conversations/${controller.id}` && call.method === "PATCH"),
-    ).toBe(false);
+    const reads = (path) =>
+      app.request.mock.calls.filter(([call]) => call.path === path).length;
+    const missing = "/api/conversations/99999999-9999-4999-8999-999999999999";
+    // The Cat's own ID (written without dashes) is not fetched as a card.
+    expect(reads(`/api/conversations/${controller.id.replace(/-/g, "")}`)).toBe(0);
+    expect(reads(missing)).toBe(1);
+    const namedReads = reads(`/api/conversations/${worker.id.replace(/-/g, "")}`);
+    click(app, "refresh");
+    await waitFor(() =>
+      expect(
+        reads(`/api/conversations/${worker.id.replace(/-/g, "")}`),
+      ).toBeGreaterThan(namedReads),
+    );
+    // A UUID that is not a conversation is not asked for again.
+    expect(reads(missing)).toBe(1);
+  });
+
+  it("keeps keyboard focus on a card across history refreshes", async () => {
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return {
+            items: [
+              {
+                llm_message: {
+                  role: "assistant",
+                  content: [{ type: "text", text: `See ${worker.id}.` }],
+                },
+              },
+            ],
+          };
+      },
+    });
+    await waitFor(() =>
+      expect(app.container.querySelector(".cat-ref")).not.toBeNull(),
+    );
+    const before = app.container.querySelector(".cat-ref");
+    before.focus();
+    click(app, "refresh");
+    await waitFor(() =>
+      expect(app.container.querySelector(".cat-ref")).not.toBe(before),
+    );
+    expect(document.activeElement).toBe(
+      app.container.querySelector(".cat-ref"),
+    );
   });
 
   it("hides the Cat filter until a Cat is chosen", async () => {

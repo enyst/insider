@@ -55,7 +55,7 @@ dependencies or run a build.
   Cat is chosen, **This Cat's work** narrows the list to conversations tracked by that Cat: workers it tagged
   with `insidercat`, ones you added with **Track with Cat**, and its own
   sub-conversations. Tracking only edits tags; it never messages the work.
-- **Resolve** marks finished work as done with the shared `resolved: user` tag;
+- **Resolve** marks work as done with the shared `resolved: user` tag;
   **Reopen** removes it. Resolved work moves to a collapsed **Resolved** group
   unless it needs you again (approval, paused, error, stuck). Agent Server
   Projects may also set `resolved: auto` from a server-side check.

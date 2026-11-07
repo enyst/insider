@@ -118,5 +118,6 @@ describe("conversation references", () => {
     expect(relativeAge("2026-11-07T11:55:00Z", now, "en")).toBe("5m ago");
     expect(relativeAge("2026-11-07T09:00:00Z", now, "en")).toBe("3h ago");
     expect(relativeAge("not a date", now, "en")).toBe("");
+    expect(relativeAge("2026-11-07T12:02:00Z", now, "en")).toBe("now");
   });
 });

@@ -1736,7 +1736,7 @@
   "INSIDER_CAT$RESOLVE": {
     "en": "Resolve",
     "zh-CN": "标记为已解决",
-    "de": "Als erledigt markieren",
+    "de": "Erledigen",
     "ko-KR": "해결됨으로 표시",
     "no": "Merk som løst",
     "zh-TW": "標記為已解決",
@@ -1752,19 +1752,19 @@
   },
   "INSIDER_CAT$REOPEN": {
     "en": "Reopen",
-    "zh-CN": "重新打开",
-    "de": "Wieder öffnen",
+    "zh-CN": "取消解决",
+    "de": "Als offen markieren",
     "ko-KR": "다시 열기",
     "no": "Gjenåpne",
-    "zh-TW": "重新開啟",
+    "zh-TW": "取消解決",
     "it": "Riapri",
     "pt": "Reabrir",
     "es": "Reabrir",
     "ar": "إعادة الفتح",
     "fr": "Rouvrir",
     "tr": "Yeniden aç",
-    "ja": "再開する",
-    "uk": "Відкрити знову",
+    "ja": "未解決に戻す",
+    "uk": "Позначити як невирішене",
     "ca": "Reobre"
   },
   "INSIDER_CAT$GROUP_RESOLVED": {
@@ -1785,7 +1785,7 @@
     "ca": "Resolt"
   },
   "INSIDER_CAT$TAG_ERROR": {
-    "en": "Couldn't update this conversation: {{message}}",
+    "en": "Could not update this conversation: {{message}}",
     "zh-CN": "无法更新此对话：{{message}}",
     "de": "Diese Unterhaltung konnte nicht aktualisiert werden: {{message}}",
     "ko-KR": "이 대화를 업데이트할 수 없습니다: {{message}}",

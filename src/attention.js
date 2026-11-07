@@ -33,7 +33,8 @@ const groupOf = new Map(
   ),
 );
 
-function groupFor(conversation) {
+/** The board group a conversation belongs to. */
+export function groupFor(conversation) {
   const group = groupOf.get(conversation?.execution_status) || "other";
   return isResolved(conversation) && group !== "needsYou" ? "resolved" : group;
 }
@@ -107,7 +108,8 @@ export function conversationRefs(text, limit = 6) {
 export function relativeAge(value, now = Date.now(), locale) {
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return "";
-  const seconds = Math.round((time - now) / 1000);
+  // A server clock slightly ahead of ours still reads as "now".
+  const seconds = Math.min(0, Math.round((time - now) / 1000));
   const units = [
     ["day", 86400],
     ["hour", 3600],
@@ -120,5 +122,5 @@ export function relativeAge(value, now = Date.now(), locale) {
   for (const [unit, size] of units)
     if (Math.abs(seconds) >= size)
       return format.format(Math.round(seconds / size), unit);
-  return format.format(0, "minute");
+  return format.format(0, "second");
 }

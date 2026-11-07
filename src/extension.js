@@ -11,6 +11,7 @@ import {
   belongsToCat,
   conversationRefs,
   groupByAttention,
+  groupFor,
   idKey,
   isResolved,
   relativeAge,
@@ -29,6 +30,7 @@ const INSIDER_INSTRUCTIONS = "__INSIDER_SKILL_TEXT__";
 const PAGE_SIZE = 100;
 // Conversations the Cat names are re-read on each history refresh.
 const REF_LIMIT = 6;
+const REF_TIMEOUT = 4000;
 const CONTROLLER_STORAGE_PREFIX = "insider-cat:controller:";
 const NEW_COMMAND = "/new";
 const CONDENSE_COMMAND = "/condense";
@@ -352,6 +354,7 @@ export function activate(host) {
         let timer = null;
         let board = [];
         let cursor = null;
+        const missingRefs = new Set();
         let boardScope = "all";
         const collapsedGroups = new Set(COLLAPSED_GROUPS);
         const tracking = new Set();
@@ -578,14 +581,21 @@ export function activate(host) {
             tracking.delete(c.id);
             if (alive) {
               renderBoard();
+              // A resolved card may move into a collapsed group: keep focus
+              // on that group's toggle instead of losing it.
+              const moved = board.find((item) => item.id === c.id);
               restoreFocus(
                 `[data-card="${c.id}"] [data-action="${focusAction}"]`,
+                moved && `[data-action="group-${groupFor(moved)}"]`,
               );
             }
           }
         }
-        function restoreFocus(selector) {
-          root.querySelector(selector)?.focus?.();
+        function restoreFocus(selector, fallback) {
+          (
+            root.querySelector(selector) ||
+            (fallback && root.querySelector(fallback))
+          )?.focus?.();
         }
         function renderBoard() {
           if (!alive) return;
@@ -817,14 +827,27 @@ export function activate(host) {
             for (const ref of conversationRefs(message.text))
               if (idKey(ref) !== idKey(controllerId))
                 keys.set(idKey(ref), ref);
-          const wanted = [...keys.values()].slice(-REF_LIMIT);
+          const wanted = [...keys.values()]
+            .filter((ref) => !missingRefs.has(idKey(ref)))
+            .slice(-REF_LIMIT);
           const found = await Promise.allSettled(
-            wanted.map((ref) => request(detailPath(ref))),
+            wanted.map((ref) =>
+              Promise.race([
+                request(detailPath(ref)),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error("timeout")), REF_TIMEOUT),
+                ),
+              ]),
+            ),
           );
           const refs = new Map();
-          found.forEach((result) => {
+          found.forEach((result, index) => {
             if (result.status === "fulfilled" && result.value?.id)
               refs.set(idKey(result.value.id), result.value);
+            // Other UUIDs in text (events, tool calls) are not conversations:
+            // stop asking for them while this page is open.
+            else if (!/timeout/.test(String(result.reason?.message)))
+              missingRefs.add(idKey(wanted[index]));
           });
           return refs;
         }
@@ -833,6 +856,7 @@ export function activate(host) {
           card.type = "button";
           card.className = "cat-ref";
           card.dataset.action = "open-ref";
+          card.dataset.ref = idKey(c.id);
           card.dataset.status = c.execution_status || "unknown";
           card.title = c.id;
           const title = document.createElement("span");
@@ -842,8 +866,9 @@ export function activate(host) {
           meta.className = "cat-card-meta";
           const badge = document.createElement("span");
           badge.className = "cat-badge";
-          badge.textContent = isResolved(c)
-            ? t("groupResolved")
+          badge.textContent =
+            groupFor(c) === "resolved"
+              ? t("groupResolved")
             : t(
                 EXECUTION_STATUSES.has(c.execution_status)
                   ? c.execution_status
@@ -902,6 +927,9 @@ export function activate(host) {
             )
               return;
             const history = role("history");
+            // Rebuilding the history must not drop keyboard focus on a card.
+            const focusedRef = document.activeElement?.closest?.(".cat-ref")
+              ?.dataset.ref;
             const previousScroll = history.scrollTop;
             const followLatest =
               history.scrollHeight - previousScroll - history.clientHeight < 48;
@@ -923,6 +951,10 @@ export function activate(host) {
             }
             if (!history.childElementCount)
               history.textContent = t("noMessages");
+            if (focusedRef)
+              history
+                .querySelector(`.cat-ref[data-ref="${focusedRef}"]`)
+                ?.focus();
             history.scrollTop = followLatest
               ? history.scrollHeight
               : previousScroll;
