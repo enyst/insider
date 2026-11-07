@@ -34,9 +34,25 @@ const groupOf = new Map(
   ),
 );
 
+// Shared with Agent Server Projects: an agent that ended its turn on a question
+// has turn=asked and the one-line question in `ask`; a new message clears both.
+export const askOf = (conversation) => {
+  const ask = conversation?.tags?.ask;
+  return conversation?.tags?.turn === "asked" && typeof ask === "string"
+    ? ask.trim()
+    : "";
+};
+
 /** The board group a conversation belongs to. */
 export function groupFor(conversation) {
-  const group = groupOf.get(conversation?.execution_status) || "other";
+  let group = groupOf.get(conversation?.execution_status) || "other";
+  // A turn that ended on a question needs the person, unless they resolved it.
+  if (
+    conversation?.tags?.turn === "asked" &&
+    group !== "working" &&
+    !isResolved(conversation)
+  )
+    group = "needsYou";
   // Running work was just reopened by a new message, matching Agent Server.
   return isResolved(conversation) && !["needsYou", "working"].includes(group)
     ? "resolved"
@@ -51,9 +67,7 @@ export function groupByAttention(conversations) {
     ),
   );
   for (const conversation of conversations)
-    buckets
-      .get(groupFor(conversation))
-      .push(conversation);
+    buckets.get(groupFor(conversation)).push(conversation);
   return [...buckets]
     .filter(([, items]) => items.length)
     .map(([id, items]) => ({ id, items }));
@@ -92,7 +106,10 @@ export function untrackedTags(tags) {
 const UUID_TEXT =
   /\b[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}\b/gi;
 /** Compare conversation IDs whether or not the API wrote them with dashes. */
-export const idKey = (id) => String(id || "").toLowerCase().replace(/-/g, "");
+export const idKey = (id) =>
+  String(id || "")
+    .toLowerCase()
+    .replace(/-/g, "");
 
 /** Conversation IDs mentioned in a message, first mention first, deduplicated. */
 export function conversationRefs(text, limit = 6) {
@@ -149,7 +166,11 @@ export function foldReactions(events) {
   for (const event of events || []) {
     if (event?.kind !== "ReactionEvent" || !event.target_event_id) continue;
     if (!REACTION_EMOJI[event.emoji]) continue;
-    const key = JSON.stringify([event.target_event_id, event.emoji, event.source]);
+    const key = JSON.stringify([
+      event.target_event_id,
+      event.emoji,
+      event.source,
+    ]);
     latest.delete(key);
     latest.set(key, event);
   }

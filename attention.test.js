@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  askOf,
   foldReactions,
   belongsToCat,
   conversationRefs,
@@ -71,7 +72,11 @@ describe("Cat tracking tags", () => {
     );
     // Dropping the role would make this top-level conversation read as a Cat.
     expect(
-      untrackedTags({ smolpaws: "insider", insiderrole: "worker", insidercat: cat }),
+      untrackedTags({
+        smolpaws: "insider",
+        insiderrole: "worker",
+        insidercat: cat,
+      }),
     ).toEqual({ smolpaws: "insider", insiderrole: "worker" });
   });
 });
@@ -104,6 +109,35 @@ describe("resolved conversations", () => {
   });
 });
 
+describe("asks", () => {
+  it("puts a turn that ended on a question under needs-you unless resolved", () => {
+    const asked = (extra = {}) => ({
+      tags: {
+        turn: "asked",
+        ask: "  Keep the redirects or remove them?  ",
+        ...extra,
+      },
+    });
+    const groups = groupByAttention([
+      item("a", "finished", asked()),
+      item("b", "idle", asked()),
+      item("c", "running", asked()),
+      item("d", "finished", asked({ resolved: "user" })),
+      item("e", "finished", { tags: { ask: "stale", turn: "answered" } }),
+    ]);
+    expect(groups.map((g) => [g.id, g.items.map((c) => c.id)])).toEqual([
+      ["needsYou", ["a", "b"]],
+      ["working", ["c"]],
+      ["finished", ["e"]],
+      ["resolved", ["d"]],
+    ]);
+    expect(askOf(item("a", "finished", asked()))).toBe(
+      "Keep the redirects or remove them?",
+    );
+    expect(askOf(item("e", "finished", { tags: { ask: "stale" } }))).toBe("");
+  });
+});
+
 describe("conversation references", () => {
   it("finds dashed and plain IDs once each, in order, up to the limit", () => {
     const a = "11111111-1111-4111-8111-111111111111";
@@ -126,7 +160,11 @@ describe("conversation references", () => {
 
 describe("foldReactions", () => {
   const r = (target_event_id, emoji, source, removed = false) => ({
-    kind: "ReactionEvent", target_event_id, emoji, source, removed,
+    kind: "ReactionEvent",
+    target_event_id,
+    emoji,
+    source,
+    removed,
   });
   it("keeps the latest event per target, emoji and source", () => {
     const folded = foldReactions([
@@ -139,7 +177,9 @@ describe("foldReactions", () => {
       r("m3", "rocket", "agent"),
       { kind: "MessageEvent", id: "m1" },
     ]);
-    expect(folded.get("m1")).toEqual([{ emoji: "+1", sources: ["user", "agent"] }]);
+    expect(folded.get("m1")).toEqual([
+      { emoji: "+1", sources: ["user", "agent"] },
+    ]);
     expect(folded.get("m2")).toEqual([{ emoji: "eyes", sources: ["agent"] }]);
     expect(folded.has("m3")).toBe(false);
   });

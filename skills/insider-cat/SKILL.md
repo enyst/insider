@@ -132,7 +132,9 @@ waiting for confirmation, paused, error, or stuck needs the user; running is
 working; finished is ready to check, not proof of success; idle is quiet;
 anything else is other.
 
-For each item that needs the user, state the specific ask in one line.
+For each item that needs the user, state the specific ask in one line. A
+conversation tagged `turn: asked` ended its turn on a question and needs the
+user too, unless it is resolved; its `ask` tag holds that question.
 
 In written messages, name a conversation by its full id; the Projects page
 shows a live card for it when it belongs to the current backend. Do not read
