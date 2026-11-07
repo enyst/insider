@@ -112,6 +112,11 @@ function supportsControllerLaunch(schema) {
 // Agent Server marks a message another conversation sent with
 // sender "conversation:<id>" and puts a header for the agent in front of it.
 const SENDER_PREFIX = "conversation:";
+// Headers the server puts before a message one conversation passes to another:
+// coordinator instructions, a member's update or reply, and copies of what the
+// person wrote in a member conversation.
+const SENDER_HEADER =
+  /^\[(Sent by|Update from|Reply in|Message from the person in) /;
 
 /** True when a failed request says the resource does not exist (404). */
 function isNotFound(error) {
@@ -130,16 +135,20 @@ function messageText(event) {
         ? event.sender.slice(SENDER_PREFIX.length)
         : "";
     let parts = (message.content || []).filter((item) => item.type === "text");
-    if (
-      sender &&
-      parts.length > 1 &&
-      /^\[(?:Sent by|Update from) /.test(parts[0].text)
-    )
-      parts = parts.slice(1);
+    const header =
+      sender && parts.length > 1 ? SENDER_HEADER.exec(parts[0].text)?.[1] : "";
+    if (header) parts = parts.slice(1);
     const text = parts.map((item) => item.text).join("\n");
     if (text.trim())
       return sender
-        ? { id: event.id, role: "user", text, sender }
+        ? {
+            id: event.id,
+            role: "user",
+            text,
+            sender,
+            // The person's own words, copied from a project conversation.
+            person: header === "Message from the person in",
+          }
         : {
             id: event.id,
             role: message.role,
@@ -980,11 +989,13 @@ export function activate(host) {
                 : message.role;
               const label = document.createElement("strong");
               label.textContent = t(
-                message.sender
-                  ? "fromConversation"
-                  : message.role === "user"
-                    ? "user"
-                    : "assistant",
+                message.person
+                  ? "youInConversation"
+                  : message.sender
+                    ? "fromConversation"
+                    : message.role === "user"
+                      ? "user"
+                      : "assistant",
               );
               row.append(label, document.createTextNode(message.text));
               const rowRefs = new Map();
