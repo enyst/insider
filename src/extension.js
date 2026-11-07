@@ -8,8 +8,10 @@ import { catPageMarkup, catViewStyles, mountCatVoice } from "./cat-view.js";
 import {
   ATTENTION_GROUPS,
   COLLAPSED_GROUPS,
+  REACTION_EMOJI,
   belongsToCat,
   conversationRefs,
+  foldReactions,
   groupByAttention,
   groupFor,
   idKey,
@@ -110,6 +112,13 @@ function supportsControllerLaunch(schema) {
 // sender "conversation:<id>" and puts a header for the agent in front of it.
 const SENDER_PREFIX = "conversation:";
 
+/** True when a failed request says the resource does not exist (404). */
+function isNotFound(error) {
+  const status = error?.status ?? error?.response?.status ?? error?.statusCode;
+  if (status !== undefined) return Number(status) === 404;
+  return /\b404\b|not found/i.test(String(error?.message || ""));
+}
+
 function messageText(event) {
   const message = event.llm_message;
   if (message && ["user", "assistant"].includes(message.role)) {
@@ -125,8 +134,9 @@ function messageText(event) {
     const text = parts.map((item) => item.text).join("\n");
     if (text.trim())
       return sender
-        ? { role: "user", text, sender }
+        ? { id: event.id, role: "user", text, sender }
         : {
+            id: event.id,
             role: message.role,
             text: message.role === "user" ? userMessageForDisplay(text) : text,
           };
@@ -135,7 +145,7 @@ function messageText(event) {
     event.action?.kind === "FinishAction" &&
     typeof event.action.message === "string"
   ) {
-    return { role: "assistant", text: event.action.message };
+    return { id: event.id, role: "assistant", text: event.action.message };
   }
   return null;
 }
@@ -863,8 +873,9 @@ export function activate(host) {
             if (result.status === "fulfilled" && result.value?.id)
               refs.set(idKey(result.value.id), result.value);
             // Other UUIDs in text (events, tool calls) are not conversations:
-            // stop asking for them while this page is open.
-            else if (!/timeout/.test(String(result.reason?.message)))
+            // stop asking for them while this page is open. Only a clear
+            // "not found" counts; a timeout or server error is retried.
+            else if (isNotFound(result.reason))
               missingRefs.add(idKey(wanted[index]));
           });
           return refs;
@@ -933,10 +944,9 @@ export function activate(host) {
             state.controllerInvalid = false;
             state.controllerStatusUnknown = false;
             state.controller = info;
-            const messages = [...(events.items || [])]
-              .reverse()
-              .map(messageText)
-              .filter(Boolean);
+            const chronological = [...(events.items || [])].reverse();
+            const messages = chronological.map(messageText).filter(Boolean);
+            const reactions = foldReactions(chronological);
             const refs = await readConversationRefs(messages, id);
             if (
               !alive ||
@@ -976,6 +986,28 @@ export function activate(host) {
               for (const ref of rowRefs.values()) {
                 const linked = refs.get(idKey(ref));
                 if (linked) row.append(refCard(linked));
+              }
+              const chips = message.id && reactions.get(message.id);
+              if (chips?.length) {
+                const strip = document.createElement("div");
+                strip.className = "cat-reactions";
+                for (const chip of chips) {
+                  const item = document.createElement("span");
+                  item.className = "cat-reaction";
+                  item.dataset.emoji = chip.emoji;
+                  item.textContent = REACTION_EMOJI[chip.emoji];
+                  item.title = chip.sources
+                    .map((source) => t(source === "user" ? "user" : "assistant"))
+                    .join(", ");
+                  // Screen readers name the emoji in the reader's language.
+                  item.setAttribute("role", "img");
+                  item.setAttribute(
+                    "aria-label",
+                    `${REACTION_EMOJI[chip.emoji]} ${item.title}`,
+                  );
+                  strip.append(item);
+                }
+                row.append(strip);
               }
               history.append(row);
             }

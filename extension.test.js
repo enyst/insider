@@ -360,6 +360,72 @@ describe("Insider Cat work board", () => {
     expect(row.querySelectorAll(".cat-ref").length).toBe(1);
   });
 
+  it("asks again for a live card after a transient error when the person refreshes", async () => {
+    let failures = 1;
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return {
+            items: [
+              { id: "a1", llm_message: { role: "assistant", content: [{ type: "text", text: `Started ${worker.id}.` }] } },
+            ],
+          };
+        if (path === `/api/conversations/${worker.id}`) {
+          if (failures-- > 0)
+            throw Object.assign(new Error("HTTP request failed (503 Service Unavailable)"), { status: 503 });
+          return { ...worker, title: "Back again" };
+        }
+      },
+    });
+    const reads = () =>
+      app.request.mock.calls.filter(([call]) => call.path === `/api/conversations/${worker.id}`).length;
+    await waitFor(() => expect(reads()).toBe(1));
+    expect(app.container.querySelector(".cat-ref")).toBeNull();
+    click(app, "refresh");
+    await waitFor(() =>
+      expect(app.container.querySelector(".cat-ref")?.textContent).toContain("Back again"),
+    );
+  });
+
+  it("shows reaction chips on the message they target", async () => {
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return {
+            items: [
+              { kind: "ReactionEvent", target_event_id: "f1", emoji: "tada", source: "agent", removed: false },
+              { kind: "ReactionEvent", target_event_id: "f1", emoji: "tada", source: "user", removed: false },
+              { id: "f1", action: { kind: "FinishAction", message: "All finished." } },
+              { kind: "ReactionEvent", target_event_id: "u1", emoji: "eyes", source: "agent", removed: true },
+              { kind: "ReactionEvent", target_event_id: "a1", emoji: "+1", source: "user", removed: false },
+              { id: "a1", llm_message: { role: "assistant", content: [{ type: "text", text: "Done." }] } },
+              { kind: "ReactionEvent", target_event_id: "u1", emoji: "eyes", source: "agent", removed: false },
+              { id: "u1", llm_message: { role: "user", content: [{ type: "text", text: "Check the board." }] } },
+            ],
+          };
+      },
+    });
+    await waitFor(() =>
+      expect(app.container.querySelectorAll(".cat-message").length).toBe(3),
+    );
+    const [asked, answered, finished] = app.container.querySelectorAll(".cat-message");
+    // Newest first from the API: the eyes reaction was later removed.
+    expect(asked.querySelector(".cat-reactions")).toBeNull();
+    const chip = answered.querySelector(".cat-reaction");
+    expect(chip.textContent).toBe("👍");
+    expect(chip.title).toBe("You");
+    expect(chip.getAttribute("role")).toBe("img");
+    expect(chip.getAttribute("aria-label")).toBe("👍 You");
+    // A finish answer can be a target, and one chip names both reactors.
+    const both = finished.querySelector(".cat-reaction");
+    expect(both.textContent).toBe("🎉");
+    expect(both.title).toBe("You, Insider Cat");
+  });
+
   it("shows live cards for conversations the Cat names", async () => {
     const named = {
       ...worker,
@@ -390,7 +456,7 @@ describe("Insider Cat work board", () => {
         if (path === `/api/conversations/${worker.id.replace(/-/g, "")}`)
           return named;
         if (path === "/api/conversations/99999999-9999-4999-8999-999999999999")
-          throw new Error("Not found");
+          throw Object.assign(new Error("HTTP request failed (404 Not Found)"), { status: 404 });
       },
     });
     await waitFor(() =>
