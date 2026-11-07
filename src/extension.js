@@ -129,7 +129,11 @@ function messageText(event) {
         ? event.sender.slice(SENDER_PREFIX.length)
         : "";
     let parts = (message.content || []).filter((item) => item.type === "text");
-    if (sender && parts.length > 1 && /^\[Sent by /.test(parts[0].text))
+    if (
+      sender &&
+      parts.length > 1 &&
+      /^\[(?:Sent by|Update from) /.test(parts[0].text)
+    )
       parts = parts.slice(1);
     const text = parts.map((item) => item.text).join("\n");
     if (text.trim())
@@ -381,10 +385,9 @@ export function activate(host) {
         const collapsedGroups = new Set(COLLAPSED_GROUPS);
         const tracking = new Set();
         const groupCopy = Object.fromEntries(
-          [...ATTENTION_GROUPS.map((g) => g.id), "other", "resolved"].map((id) => [
-            id,
-            `group${id[0].toUpperCase()}${id.slice(1)}`,
-          ]),
+          [...ATTENTION_GROUPS.map((g) => g.id), "other", "resolved"].map(
+            (id) => [id, `group${id[0].toUpperCase()}${id.slice(1)}`],
+          ),
         );
         let controllers = [];
         let workspaces = [];
@@ -576,9 +579,7 @@ export function activate(host) {
           await updateTags(
             c,
             (tags) =>
-              tracked
-                ? trackedTags(tags, controllerId)
-                : untrackedTags(tags),
+              tracked ? trackedTags(tags, controllerId) : untrackedTags(tags),
             "track-worker",
             () => state.controller?.id === controllerId,
           );
@@ -646,14 +647,16 @@ export function activate(host) {
             head.setAttribute("aria-expanded", String(!collapsed));
             head.textContent = `${t(groupCopy[group.id])} · ${group.items.length}`;
             head.addEventListener("click", () => {
-              if (collapsedGroups.has(group.id)) collapsedGroups.delete(group.id);
+              if (collapsedGroups.has(group.id))
+                collapsedGroups.delete(group.id);
               else collapsedGroups.add(group.id);
               renderBoard();
               restoreFocus(`[data-action="group-${group.id}"]`);
             });
             section.append(head);
             parent.append(section);
-            if (!collapsed) for (const c of group.items) section.append(card(c));
+            if (!collapsed)
+              for (const c of group.items) section.append(card(c));
           }
           if (!cards.length) {
             const empty = document.createElement("p");
@@ -898,11 +901,11 @@ export function activate(host) {
           badge.textContent =
             groupFor(c) === "resolved"
               ? t("groupResolved")
-            : t(
-                EXECUTION_STATUSES.has(c.execution_status)
-                  ? c.execution_status
-                  : "unknown",
-              );
+              : t(
+                  EXECUTION_STATUSES.has(c.execution_status)
+                    ? c.execution_status
+                    : "unknown",
+                );
           meta.append(badge);
           const age = relativeAge(
             c.updated_at,
@@ -956,8 +959,8 @@ export function activate(host) {
               return;
             const history = role("history");
             // Rebuilding the history must not drop keyboard focus on a card.
-            const focusedRef = document.activeElement?.closest?.(".cat-ref")
-              ?.dataset.ref;
+            const focusedRef =
+              document.activeElement?.closest?.(".cat-ref")?.dataset.ref;
             const previousScroll = history.scrollTop;
             const followLatest =
               history.scrollHeight - previousScroll - history.clientHeight < 48;
@@ -997,7 +1000,9 @@ export function activate(host) {
                   item.dataset.emoji = chip.emoji;
                   item.textContent = REACTION_EMOJI[chip.emoji];
                   item.title = chip.sources
-                    .map((source) => t(source === "user" ? "user" : "assistant"))
+                    .map((source) =>
+                      t(source === "user" ? "user" : "assistant"),
+                    )
                     .join(", ");
                   // Screen readers name the emoji in the reader's language.
                   item.setAttribute("role", "img");
