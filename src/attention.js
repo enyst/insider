@@ -128,3 +128,39 @@ export function relativeAge(value, now = Date.now(), locale) {
       return format.format(Math.round(seconds / size), unit);
   return format.format(0, "second");
 }
+
+// Agent Server reactions: shortcodes from its allowlist, shown as emoji.
+export const REACTION_EMOJI = {
+  eyes: "👀",
+  "+1": "👍",
+  white_check_mark: "✅",
+  tada: "🎉",
+  thinking_face: "🤔",
+  heart: "❤️",
+};
+
+/**
+ * Fold ReactionEvents (oldest first) into the reactions each event shows now:
+ * Map<target event id, [{ emoji, sources: ["agent" | "user", ...] }]>.
+ * The latest event per target, emoji and source wins; unknown emoji are skipped.
+ */
+export function foldReactions(events) {
+  const latest = new Map();
+  for (const event of events || []) {
+    if (event?.kind !== "ReactionEvent" || !event.target_event_id) continue;
+    if (!REACTION_EMOJI[event.emoji]) continue;
+    const key = JSON.stringify([event.target_event_id, event.emoji, event.source]);
+    latest.delete(key);
+    latest.set(key, event);
+  }
+  const byTarget = new Map();
+  for (const event of latest.values()) {
+    if (event.removed) continue;
+    const chips = byTarget.get(event.target_event_id) || [];
+    let chip = chips.find((item) => item.emoji === event.emoji);
+    if (!chip) chips.push((chip = { emoji: event.emoji, sources: [] }));
+    chip.sources.push(event.source === "user" ? "user" : "agent");
+    byTarget.set(event.target_event_id, chips);
+  }
+  return byTarget;
+}
