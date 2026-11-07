@@ -112,7 +112,7 @@ describe("Voice companion", () => {
           return { items: [controller], next_page_id: null };
         if (path === "/api/workspaces") return { workspaces: [] };
         if (path.includes("/events/search")) return { items: [] };
-        if (path.endsWith("/events")) return { success: true };
+        if (path.endsWith("/voice/messages")) return { success: true };
         if (path === "/api/conversations/cat-a") return controller;
         throw new Error(`Unexpected path: ${path}`);
       });
