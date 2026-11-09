@@ -4,7 +4,12 @@ import {
   buildRuntimeServicesSuffix,
   fetchServerInfo,
 } from "./runtime-context.js";
-import { catPageMarkup, catViewStyles, mountCatVoice } from "./cat-view.js";
+import {
+  MICROPHONE_ICON,
+  catPageMarkup,
+  catViewStyles,
+  mountCatVoice,
+} from "./cat-view.js";
 import {
   ATTENTION_GROUPS,
   COLLAPSED_GROUPS,
@@ -433,6 +438,7 @@ export function activate(host) {
           voice,
           navigate,
           conversationControls: root.querySelector(".cat-picker"),
+          actionsTarget: root.querySelector('[data-role="composer-controls"]'),
           getState: () => ({
             ...state,
             voiceSupported: Boolean(host.registerCompanion),
@@ -444,6 +450,54 @@ export function activate(host) {
             canStartVoice(),
         });
         role("conversation").title = t("partialHistory");
+        // Dictation, as in OpenHands: the browser's speech recognition types
+        // into the draft. It is not the real-time Voice call.
+        const Recognition =
+          globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
+        let dictation = null;
+        const dictate = action("dictate");
+        dictate.innerHTML = `${MICROPHONE_ICON}<span class="cat-sr-only"></span>`;
+        dictate.querySelector("span").textContent = t("dictate");
+        dictate.title = t("dictate");
+        dictate.hidden = !Recognition;
+        const stopDictation = () => {
+          const current = dictation;
+          dictation = null;
+          dictate.setAttribute("aria-pressed", "false");
+          current?.stop();
+        };
+        dictate.addEventListener("click", () => {
+          if (dictation) return stopDictation();
+          if (!Recognition) return;
+          const recognition = new Recognition();
+          recognition.lang =
+            document.documentElement.lang || navigator.language;
+          recognition.interimResults = false;
+          recognition.continuous = true;
+          recognition.onresult = (event) => {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              if (!event.results[i].isFinal) continue;
+              const words = event.results[i][0].transcript.trim();
+              if (!words) continue;
+              const draft = action("draft");
+              draft.value = draft.value
+                ? `${draft.value.replace(/\s+$/, "")} ${words}`
+                : words;
+              state.draft = draft.value;
+            }
+          };
+          recognition.onend = () => {
+            if (dictation === recognition) stopDictation();
+          };
+          recognition.onerror = recognition.onend;
+          dictation = recognition;
+          dictate.setAttribute("aria-pressed", "true");
+          try {
+            recognition.start();
+          } catch {
+            stopDictation();
+          }
+        });
         container.append(root);
         const request = (path, method = "GET", body) =>
           host.agentServer.request({
@@ -1785,6 +1839,7 @@ export function activate(host) {
           ++boardGeneration;
           clearTimeout(timer);
           clearTimeout(pullRequestRender);
+          stopDictation();
           clearTimeout(pullRequestSweep);
           root.remove();
           if (disposeCurrent === dispose) disposeCurrent = null;
