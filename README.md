@@ -267,7 +267,7 @@ reported as unsent, without cancelling the first request.
 
 The browser's missing-sign-in message appears before microphone access.
 
-On a Canvas version with companion controls, choose a saved Cat and select
+On a Canvas version with companion controls, open a project and select
 **Talk**. Choose a project, or select **New project** and send the first
 message to start one.
 Availability is checked before requesting microphone access.

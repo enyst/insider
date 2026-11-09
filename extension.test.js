@@ -376,9 +376,44 @@ describe("Insider Cat work board", () => {
     expect(app.host.navigate).toHaveBeenLastCalledWith(
       "/extensions/insider-cat/projects",
     );
+    // On the list, Send can't start a second Cat by accident.
+    find(app, "draft").value = "hello";
+    expect(find(app, "send").disabled).toBe(true);
+    // A remount (route change, language) keeps the list.
+    app.remount("");
+    await waitFor(() =>
+      expect(
+        [...find(app, "controller").options].map((o) => o.textContent),
+      ).toEqual(["Choose a project", "Release 0.2"]),
+    );
+    expect(find(app, "controller").value).toBe("");
+    expect(app.container.querySelector('[data-role="picker"]').hidden).toBe(
+      false,
+    );
     click(app, "new-cat");
-    expect(picker.hidden).toBe(true);
+    expect(app.container.querySelector('[data-role="picker"]').hidden).toBe(
+      true,
+    );
     expect(find(app, "all-projects").hidden).toBe(false);
+  });
+
+  it("goes back to the project list when the route does", async () => {
+    const app = mountApp({ request: projectWorld([member(running)]) });
+    await waitFor(() =>
+      expect(find(app, "controller").value).toBe(controller.id),
+    );
+    app.remount(`conversations/${controller.id}`);
+    await waitFor(() =>
+      expect(find(app, "controller").value).toBe(controller.id),
+    );
+    app.remount("");
+    await waitFor(() =>
+      expect(app.container.querySelector('[data-role="picker"]').hidden).toBe(
+        false,
+      ),
+    );
+    expect(find(app, "controller").value).toBe("");
+    expect(find(app, "send").disabled).toBe(true);
   });
 
   it("shows what an asking conversation needs on its card", async () => {

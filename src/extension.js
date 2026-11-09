@@ -178,6 +178,8 @@ export function activate(host) {
   }
   const state = {
     project: null,
+    // The person asked for the project list: don't reopen the only Cat.
+    choosingProject: false,
     draft: "",
     controller: null,
     workspace: "",
@@ -347,6 +349,7 @@ export function activate(host) {
     "projects",
     ({ container, navigate, path = "" }) => {
       if (path !== lastRoute && !state.busy && !state.uncertain) {
+        const previousRoute = lastRoute;
         lastRoute = path;
         const match = path.match(CONTROLLER_ROUTE);
         if (match) {
@@ -358,17 +361,31 @@ export function activate(host) {
           } catch {
             requestedId = match[1];
           }
+          state.choosingProject = false;
           state.requestedControllerId =
             state.controller?.id === requestedId ? null : requestedId;
           if (state.controller?.id !== requestedId) state.controller = null;
           state.newRequested = false;
         } else if (path.replace(/^\/|\/$/g, "") === "new") {
+          state.choosingProject = false;
           state.controllerInvalid = false;
           state.mutationNotice = null;
           state.workspace ||= workspaceOf(state.controller);
           state.requestedControllerId = null;
           state.controller = null;
           state.newRequested = true;
+        } else if (
+          previousRoute !== null &&
+          path.replace(/^\/|\/$/g, "") === ""
+        ) {
+          // Back to the project list from a Cat or a new project. The first
+          // visit keeps resuming the remembered Cat.
+          state.choosingProject = true;
+          state.controllerInvalid = false;
+          state.mutationNotice = null;
+          state.requestedControllerId = null;
+          state.controller = null;
+          state.newRequested = false;
         }
         rememberController();
       }
@@ -391,8 +408,6 @@ export function activate(host) {
         let controllers = [];
         // Project names by their Cat, to name each project in the chooser.
         let projectNamesByCat = new Map();
-        // The person asked for the project list; don't open the only Cat.
-        let choosingProject = false;
         let workspaces = [];
         let workspaceDiscoveryReady = false;
         let workspaceGeneration = 0;
@@ -487,8 +502,8 @@ export function activate(host) {
             state.uncertain ||
             state.controllerInvalid ||
             (!state.controller &&
-              controllers.length > 1 &&
-              !state.newRequested);
+              !state.newRequested &&
+              (controllers.length > 1 || state.choosingProject));
           action("send").textContent = t(state.busy ? "sending" : "send");
           action("checked").hidden = !state.uncertain;
           action("new-cat").disabled =
@@ -896,6 +911,11 @@ export function activate(host) {
           return card;
         }
         async function discoverControllers(firstPage, generation) {
+          // Project names only label the chooser: never hold discovery up.
+          const projectsRead = Promise.race([
+            request("/api/projects").catch(() => null),
+            new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
+          ]);
           let items = [...firstPage.items];
           let next = firstPage.next_page_id;
           const seen = new Set();
@@ -914,7 +934,7 @@ export function activate(host) {
           if (!alive || generation !== boardGeneration) return;
           board = unique(items);
           controllers = unique(items.filter(isController));
-          const projects = await request("/api/projects").catch(() => null);
+          const projects = await projectsRead;
           if (!alive || generation !== boardGeneration) return;
           projectNamesByCat = new Map(
             (projects?.projects || [])
@@ -936,7 +956,7 @@ export function activate(host) {
             !state.controller &&
             !state.controllerInvalid &&
             !state.newRequested &&
-            !choosingProject &&
+            !state.choosingProject &&
             controllers.length === 1
           )
             state.controller = controllers[0];
@@ -1416,7 +1436,9 @@ export function activate(host) {
             !discoveryReady ||
             state.uncertain ||
             state.controllerInvalid ||
-            (!state.controller && controllers.length > 1 && !state.newRequested)
+            (!state.controller &&
+              !state.newRequested &&
+              (controllers.length > 1 || state.choosingProject))
           )
             return;
           const text = action("draft").value.trim();
@@ -1665,7 +1687,7 @@ export function activate(host) {
         });
         action("all-projects").addEventListener("click", () => {
           if (state.busy || state.uncertain) return;
-          choosingProject = true;
+          state.choosingProject = true;
           state.controller = null;
           state.newRequested = false;
           state.requestedControllerId = null;
@@ -1683,6 +1705,7 @@ export function activate(host) {
         });
         action("controller").addEventListener("change", () => {
           if (state.busy || state.uncertain) return;
+          state.choosingProject = Boolean(!action("controller").value);
           state.controller =
             controllers.find((c) => c.id === action("controller").value) ||
             null;
@@ -1701,10 +1724,13 @@ export function activate(host) {
           if (state.controller) {
             void refreshController();
             navigate(controllerPagePath(state.controller.id));
+            // The chooser hides with the Cat open; keep focus on the page.
+            action("draft").focus();
           }
         });
         function startNewController() {
           if (state.busy || state.uncertain) return;
+          state.choosingProject = false;
           state.workspace ||= workspaceOf(state.controller);
           state.controller = null;
           forgetProject();
@@ -1721,6 +1747,7 @@ export function activate(host) {
           renderControllerChoices();
           renderBoard();
           navigate(NEW_CONTROLLER_PAGE_PATH);
+          action("draft").focus();
         }
         action("new-cat").addEventListener("click", startNewController);
         renderControls();
