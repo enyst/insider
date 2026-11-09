@@ -12,6 +12,7 @@ import {
   askOf,
   belongsToCat,
   conversationRefs,
+  mentionParts,
   foldReactions,
   groupByAttention,
   groupFor,
@@ -898,6 +899,23 @@ export function activate(host) {
           });
           return refs;
         }
+        // Mentions read as links that open the conversation, named by its
+        // current title when the server reported it.
+        function mentionNodes(text, refs) {
+          return mentionParts(text).map((part) => {
+            if (typeof part === "string") return document.createTextNode(part);
+            const link = document.createElement("button");
+            link.type = "button";
+            link.className = "cat-mention";
+            link.dataset.ref = idKey(part.id);
+            link.title = part.id;
+            link.textContent = refs.get(idKey(part.id))?.title || part.title;
+            link.addEventListener("click", () =>
+              open(refs.get(idKey(part.id))?.id || part.id),
+            );
+            return link;
+          });
+        }
         function refCard(c) {
           const card = document.createElement("button");
           card.type = "button";
@@ -1197,7 +1215,7 @@ export function activate(host) {
                       ? "user"
                       : "assistant",
               );
-              row.append(label, document.createTextNode(message.text));
+              row.append(label, ...mentionNodes(message.text, refs));
               const rowRefs = new Map();
               for (const ref of [
                 ...(message.sender ? [message.sender] : []),

@@ -619,6 +619,46 @@ describe("Insider Cat work board", () => {
     expect(both.title).toBe("You, Insider Cat");
   });
 
+  it("turns conversation mentions into links with the live title", async () => {
+    const hex = worker.id.replace(/-/g, "");
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return {
+            items: [
+              {
+                llm_message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "text",
+                      text: `[Old title](conversation:${hex}) needs your answer.`,
+                    },
+                  ],
+                },
+              },
+            ],
+          };
+        if (path === `/api/conversations/${hex}`)
+          return { ...worker, title: "Ship the board" };
+      },
+    });
+    await waitFor(() =>
+      expect(
+        app.container.querySelector(".cat-mention")?.textContent,
+      ).toBe("Ship the board"),
+    );
+    const row = app.container.querySelector(".cat-mention").closest(".cat-message");
+    expect(row.textContent).toContain("Ship the board needs your answer.");
+    expect(row.textContent).not.toContain("conversation:");
+    app.container.querySelector(".cat-mention").click();
+    expect(app.host.navigate).toHaveBeenCalledWith(
+      `/conversations/${encodeURIComponent(worker.id)}`,
+    );
+  });
+
   it("shows live cards for conversations the Cat names", async () => {
     const named = {
       ...worker,

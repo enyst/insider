@@ -4,6 +4,7 @@ import {
   foldReactions,
   belongsToCat,
   conversationRefs,
+  mentionParts,
   relativeAge,
   resolvedTags,
   groupByAttention,
@@ -142,6 +143,24 @@ describe("asks", () => {
       "Keep the redirects or remove them?",
     );
     expect(askOf(item("e", "finished", { tags: { ask: "stale" } }))).toBe("");
+  });
+});
+
+describe("conversation mentions", () => {
+  it("splits text around [Title](conversation:<id>) links", () => {
+    const id = "33333333333343338333333333333333";
+    expect(
+      mentionParts(`Ask [Fix export](conversation:${id}) first.`),
+    ).toEqual(["Ask ", { title: "Fix export", id }, " first."]);
+    expect(mentionParts(`[A](conversation:${id})`)).toEqual([
+      { title: "A", id },
+    ]);
+  });
+
+  it("leaves other links and plain text alone", () => {
+    const text = "See [docs](https://example.com) and [x](conversation:nope).";
+    expect(mentionParts(text)).toEqual([text]);
+    expect(mentionParts("")).toEqual([""]);
   });
 });
 

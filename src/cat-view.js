@@ -224,6 +224,9 @@ export const catViewStyles = `
 .insider-app .cat-card button{font-size:12px;min-height:40px;padding:7px 10px}
 .insider-app .cat-ref{display:grid;gap:4px;width:100%;margin-block-start:10px;padding:10px 12px;text-align:start;border:1px solid var(--cat-line);border-radius:10px;background:var(--cat-wash);white-space:normal;font-size:13px;cursor:pointer}
 .insider-app .cat-ref:hover{border-color:var(--cat-accent)}
+.insider-app .cat-mention{display:inline;padding:0 3px;margin:0;border:0;border-radius:4px;background:var(--cat-wash);color:var(--cat-accent);font:inherit;font-weight:550;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.insider-app .cat-mention:hover{text-decoration-thickness:2px}
+.insider-app .cat-mention:focus-visible{outline:2px solid var(--cat-accent);outline-offset:1px}
 .insider-app .cat-ref-title{font-weight:550;overflow-wrap:anywhere}
 .insider-app .cat-ref[data-status=waiting_for_confirmation] .cat-badge{color:var(--cat-warn)}
 .insider-app .cat-ref:is([data-status=error],[data-status=stuck]) .cat-badge{color:var(--cat-error)}

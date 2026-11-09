@@ -112,6 +112,28 @@ export const idKey = (id) =>
     .toLowerCase()
     .replace(/-/g, "");
 
+// A conversation mention as Agent Server writes it: [Title](conversation:<id>).
+const MENTION_TEXT =
+  /\[([^[\]\n]{1,200})\]\(conversation:([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})\)/gi;
+
+/**
+ * A message's text split around conversation mentions: plain strings, and
+ * `{ title, id }` for each mention, in order. Text without mentions is one
+ * string.
+ */
+export function mentionParts(text) {
+  const source = String(text || "");
+  const parts = [];
+  let last = 0;
+  for (const match of source.matchAll(MENTION_TEXT)) {
+    if (match.index > last) parts.push(source.slice(last, match.index));
+    parts.push({ title: match[1], id: match[2] });
+    last = match.index + match[0].length;
+  }
+  if (last < source.length || !parts.length) parts.push(source.slice(last));
+  return parts;
+}
+
 /** Conversation IDs mentioned in a message, first mention first, deduplicated. */
 export function conversationRefs(text, limit = 6) {
   const seen = new Set();
