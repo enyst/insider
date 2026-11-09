@@ -213,6 +213,8 @@ export const catViewStyles = `
 .insider-app .cat-card{padding:16px 0;border-block-start:1px solid var(--cat-line);display:grid;gap:9px;min-width:0}
 .insider-app .cat-card-title{font-weight:550;overflow-wrap:anywhere}
 .insider-app .cat-card-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--cat-muted)}
+.insider-app .cat-project-goal{margin:0;overflow-wrap:anywhere}
+.insider-app .cat-card-pr{font-size:12px;overflow-wrap:anywhere}
 .insider-app .cat-card-ask{font-size:13px;overflow-wrap:anywhere;border-left:2px solid var(--cat-warn);padding-left:8px}
 .insider-app .cat-card-meta>span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .insider-app .cat-badge::before{content:"";display:inline-block;width:5px;height:5px;margin-inline-end:6px;border-radius:50%;background:currentColor;vertical-align:middle}
@@ -269,7 +271,8 @@ export const catPageMarkup = `<style>${catViewStyles}</style>
       <p data-role="notice" class="cat-notice" role="status" aria-live="polite"></p><button data-action="checked" data-copy="checked" hidden></button>
     </section>
     <section class="cat-stack cat-work">
-      <div class="cat-work-head"><h2 data-copy="workTitle"></h2><button data-action="refresh" data-copy="refresh"></button></div>
+      <div class="cat-work-head"><h2 data-role="work-title"></h2><button data-action="refresh" data-copy="refresh"></button></div>
+      <p data-role="project-goal" class="cat-project-goal" hidden></p><p data-role="project-progress" class="cat-muted" hidden></p>
       <p data-role="coverage" class="cat-muted" role="status"></p><div data-role="cards" class="cat-cards"></div>
       <section class="cat-files" data-role="files" hidden>
         <div class="cat-work-head"><h3 data-role="files-title"></h3><button data-action="add-file" data-copy="addFile"></button></div>

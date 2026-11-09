@@ -16,6 +16,7 @@ import {
   groupByAttention,
   groupFor,
   idKey,
+  latestPullRequest,
   isResolved,
   relativeAge,
   resolvedTags,
@@ -596,9 +597,12 @@ export function activate(host) {
                     : belongsToCat(c, controllerId)),
               )
             : [];
+          const grouped = groupByAttention(cards);
+          renderProjectHead(grouped);
+          void readPullRequests(cards);
           const parent = role("cards");
           parent.replaceChildren();
-          for (const group of groupByAttention(cards)) {
+          for (const group of grouped) {
             const section = document.createElement("section");
             section.className = "cat-group";
             section.dataset.group = group.id;
@@ -626,6 +630,50 @@ export function activate(host) {
             empty.className = "cat-muted";
             empty.textContent = t(controllerId ? "emptyCat" : "empty");
             parent.append(empty);
+          }
+        }
+        // The project's name, goal and how its work stands, above the cards.
+        function renderProjectHead(grouped) {
+          role("work-title").textContent = boardProject?.name || t("workTitle");
+          const goal = role("project-goal");
+          goal.textContent = boardProject?.description || "";
+          goal.hidden = !goal.textContent;
+          const progress = role("project-progress");
+          progress.textContent = grouped
+            .map((g) => `${t(groupCopy[g.id])} ${g.items.length}`)
+            .join(" · ");
+          progress.hidden = !boardProject || !grouped.length;
+        }
+        // Pull requests the project's conversations mention, read once per
+        // conversation and change, from the light project transcript.
+        const pullRequests = new Map();
+        const pullRequestReads = new Map();
+        async function readPullRequests(cards) {
+          const project = boardProject;
+          if (!project) return;
+          for (const c of cards) {
+            const key = idKey(c.id);
+            const version = `${project.id}:${c.updated_at || ""}`;
+            if (pullRequestReads.get(key) === version) continue;
+            pullRequestReads.set(key, version);
+            request(
+              `/api/projects/${encodeURIComponent(project.id)}/conversations/${encodeURIComponent(c.id)}/messages?limit=50`,
+            )
+              .then((transcript) => {
+                if (!alive || boardProject?.id !== project.id) return;
+                const pr = latestPullRequest(
+                  (transcript?.messages || [])
+                    .filter((m) => m.source !== "user")
+                    .map((m) => m.text),
+                );
+                const before = pullRequests.get(key)?.url;
+                if (pr) pullRequests.set(key, pr);
+                else pullRequests.delete(key);
+                if (before !== pr?.url) renderBoard();
+              })
+              .catch(() => {
+                // Older servers have no transcript: cards show no PR line.
+              });
           }
         }
         function card(c) {
@@ -679,7 +727,22 @@ export function activate(host) {
               ),
           );
           buttons.append(resolve);
-          card.append(title, meta, ...(ask ? [askLine] : []), buttons);
+          const pr = pullRequests.get(idKey(c.id));
+          const prLine = document.createElement("a");
+          if (pr) {
+            prLine.className = "cat-card-pr";
+            prLine.href = pr.url;
+            prLine.target = "_blank";
+            prLine.rel = "noopener noreferrer";
+            prLine.textContent = `PR ${pr.label}`;
+          }
+          card.append(
+            title,
+            meta,
+            ...(ask ? [askLine] : []),
+            ...(pr ? [prLine] : []),
+            buttons,
+          );
           return card;
         }
         async function discoverControllers(firstPage, generation) {
