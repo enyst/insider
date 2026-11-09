@@ -1,5 +1,14 @@
 # Insider Cat
 
+## What is Insider?
+
+Insider Cat is an assistant that lives in Agent Canvas. It has its own
+conversation, so you can talk to it directly, and it helps you organize your
+projects and coordinate the other conversations working on them. It can also
+respond by voice. It sits alongside SmolPaws as a separate helper — not a copy,
+and not a second window into the same conversation — with its own context and
+capabilities.
+
 A Cat-first Projects page and a durable companion for **Agent Canvas**. Insider Cat
 is a sibling of SmolPaws, with its own conversation and the capabilities supplied
 by its configured agent profile.
