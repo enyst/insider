@@ -1937,6 +1937,23 @@
     "uk": "Для цього типу файлу немає попереднього перегляду.",
     "ca": "No hi ha previsualització per a aquest tipus de fitxer."
   },
+  "INSIDER_CAT$PR_LABEL": {
+    "en": "PR {{label}}",
+    "zh-CN": "PR {{label}}",
+    "de": "PR {{label}}",
+    "ko-KR": "PR {{label}}",
+    "no": "PR {{label}}",
+    "zh-TW": "PR {{label}}",
+    "it": "PR {{label}}",
+    "pt": "PR {{label}}",
+    "es": "PR {{label}}",
+    "ar": "PR {{label}}",
+    "fr": "PR {{label}}",
+    "tr": "PR {{label}}",
+    "ja": "PR {{label}}",
+    "uk": "PR {{label}}",
+    "ca": "PR {{label}}"
+  },
   "INSIDER_CAT$PR_OPEN": {
     "en": "open",
     "zh-CN": "开放中",
