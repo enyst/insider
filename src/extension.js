@@ -652,17 +652,35 @@ export function activate(host) {
         const pullRequestReads = new Map();
         let pullRequestRender = null;
         // State and CI of each pull request, from the agent server's GitHub
-        // access; read again after a minute so CI can move on.
+        // access. Open PRs are read again every minute so CI can move on;
+        // Refresh reads them at once.
         const pullRequestStatuses = new Map();
         const STATUS_TTL = 60_000;
+        const PR_STATES = new Set(["open", "closed", "merged"]);
+        let pullRequestSweep = null;
         function clearPullRequests() {
           pullRequests.clear();
           pullRequestReads.clear();
           pullRequestStatuses.clear();
+          clearTimeout(pullRequestSweep);
+          pullRequestSweep = null;
+        }
+        function expirePullRequestStatuses() {
+          for (const entry of pullRequestStatuses.values()) entry.at = 0;
+        }
+        function sweepPullRequestStatuses() {
+          if (pullRequestSweep) return;
+          pullRequestSweep = setTimeout(() => {
+            pullRequestSweep = null;
+            if (!alive || !boardProject) return;
+            for (const pr of pullRequests.values()) readPullRequestStatus(pr);
+          }, STATUS_TTL);
         }
         function readPullRequestStatus(pr) {
           const known = pullRequestStatuses.get(pr.url);
           if (known && Date.now() - known.at < STATUS_TTL) return;
+          // A merged or closed PR no longer changes.
+          if (known?.status && known.status.state !== "open") return;
           const project = boardProject;
           const entry = { at: Date.now(), status: known?.status || null };
           pullRequestStatuses.set(pr.url, entry);
@@ -676,15 +694,23 @@ export function activate(host) {
             .then((status) => {
               if (!stillWanted()) return;
               const before = JSON.stringify(entry.status);
-              entry.status =
-                status && typeof status.state === "string" ? status : null;
+              entry.status = PR_STATES.has(status?.state) ? status : null;
+              if (entry.status?.state === "open") sweepPullRequestStatuses();
               if (before !== JSON.stringify(entry.status))
                 schedulePullRequestRender();
             })
-            .catch(() => {
-              // No GitHub token, an older server, or GitHub is away: the
-              // card keeps its link and shows no state until the next read.
+            .catch((error) => {
               if (!stillWanted()) return;
+              const code = Number(
+                error?.status ?? error?.response?.status ?? error?.statusCode,
+              );
+              // GitHub away or slow: keep what we knew and try again later.
+              if (!code || code >= 500) {
+                if (entry.status?.state === "open") sweepPullRequestStatuses();
+                return;
+              }
+              // No token, no such PR, or no route on an older server: the
+              // card keeps its plain link.
               const had = entry.status;
               entry.status = null;
               if (had) schedulePullRequestRender();
@@ -1555,6 +1581,7 @@ export function activate(host) {
         });
         action("send").addEventListener("click", send);
         action("refresh").addEventListener("click", () => {
+          expirePullRequestStatuses();
           void loadBoard();
           void refreshWorkspaces();
           if (state.controller) void refreshController();
@@ -1643,6 +1670,7 @@ export function activate(host) {
           ++boardGeneration;
           clearTimeout(timer);
           clearTimeout(pullRequestRender);
+          clearTimeout(pullRequestSweep);
           root.remove();
           if (disposeCurrent === dispose) disposeCurrent = null;
           if (syncCurrent === synchronize) syncCurrent = null;

@@ -1939,11 +1939,11 @@
   },
   "INSIDER_CAT$PR_OPEN": {
     "en": "open",
-    "zh-CN": "打开",
+    "zh-CN": "开放中",
     "de": "offen",
     "ko-KR": "열림",
     "no": "åpen",
-    "zh-TW": "開啟",
+    "zh-TW": "開放中",
     "it": "aperta",
     "pt": "aberta",
     "es": "abierta",

@@ -256,6 +256,64 @@ describe("Insider Cat work board", () => {
     expect(app.container.querySelectorAll(".cat-card-pr").length).toBe(1);
   });
 
+  it("reads a PR's checks again on Refresh, and keeps the plain link without a token", async () => {
+    let statusReads = 0;
+    const app = mountApp({
+      request: projectWorld([member(running), member(worker)], ({ path }) => {
+        if (path.includes(`/conversations/${running.id}/messages`))
+          return {
+            messages: [
+              {
+                source: "agent",
+                text: "https://github.com/enyst/insider/pull/7",
+              },
+            ],
+          };
+        if (path.includes(`/conversations/${worker.id}/messages`))
+          return {
+            messages: [
+              {
+                source: "agent",
+                text: "https://github.com/enyst/insider/pull/8",
+              },
+            ],
+          };
+        if (path === "/api/git/pull-requests/enyst/insider/7") {
+          statusReads += 1;
+          return {
+            state: "open",
+            draft: false,
+            url: "https://github.com/enyst/insider/pull/7",
+            checks: statusReads === 1 ? "pending" : "success",
+          };
+        }
+        if (path === "/api/git/pull-requests/enyst/insider/8")
+          throw Object.assign(new Error("HTTP request failed (424)"), {
+            status: 424,
+          });
+      }),
+    });
+    const prOf = (c) =>
+      app.container.querySelector(`[data-card="${c.id}"] .cat-card-pr`);
+    await waitFor(() =>
+      expect(prOf(running)?.textContent).toBe(
+        "PR enyst/insider#7 · open · checks running",
+      ),
+    );
+    await waitFor(() =>
+      expect(prOf(worker)?.textContent).toBe("PR enyst/insider#8"),
+    );
+    expect(prOf(worker).dataset.checks).toBeUndefined();
+    expect(statusReads).toBe(1);
+    click(app, "refresh");
+    await waitFor(() =>
+      expect(prOf(running).textContent).toBe(
+        "PR enyst/insider#7 · open · checks pass",
+      ),
+    );
+    expect(statusReads).toBe(2);
+  });
+
   it("shows what an asking conversation needs on its card", async () => {
     const asking = member({
       ...idle,
