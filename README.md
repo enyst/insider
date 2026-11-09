@@ -82,9 +82,11 @@ dependencies or run a build.
   Up to six named conversations are re-read on each history refresh.
 - Select work using its full conversation ID without replacing your draft.
   Opening a conversation stays inside Canvas.
-- Discover saved Cat controllers across all conversation-list pages. A single
-  controller resumes automatically; multiple controllers require a choice.
-  **New Cat** creates a separate controller on the first send.
+- One Cat per project. A Cat's window shows only that project; **All
+  projects** returns to the project list, which names each project and offers
+  **New project**. Saved Cats are discovered across all conversation-list
+  pages; a single one resumes automatically. **New project** creates a separate
+  Cat on the first send.
   The App remembers the last chosen controller for its backend and organization,
   then verifies its Insider tags when loading it again. `/new` prepares a fresh
   Cat without sending that command to the previous conversation. Controllers
@@ -265,9 +267,9 @@ reported as unsent, without cancelling the first request.
 
 The browser's missing-sign-in message appears before microphone access.
 
-On a Canvas version with companion controls, choose a saved Cat and select
-**Talk**. Choose a saved conversation, or select **New Cat** and send the first
-message to create one.
+On a Canvas version with companion controls, open a project and select
+**Talk**. Choose a project, or select **New project** and send the first
+message to start one.
 Availability is checked before requesting microphone access.
 The Cat page shows the call state and **Live transcript**. A compact companion
 appears only away from Projects, keeping the call controls available without a

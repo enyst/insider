@@ -261,11 +261,11 @@ export const catViewStyles = `
 `;
 
 export const catPageMarkup = `<style>${catViewStyles}</style>
-  <header class="cat-head"><p data-copy="title"></p></header>
+  <header class="cat-head"><p data-copy="title"></p><button data-action="all-projects" data-copy="allProjects" hidden></button></header>
   <div class="cat-grid">
     <section class="cat-panel cat-stack">
       <div data-role="voice"></div>
-      <div class="cat-picker"><label><span data-copy="controller" class="cat-sr-only"></span><select data-action="controller"></select></label><button data-action="new-cat" data-copy="newCat"></button></div>
+      <div class="cat-picker" data-role="picker"><label><span data-copy="controller" class="cat-sr-only"></span><select data-action="controller"></select></label><button data-action="new-cat" data-copy="newCat"></button></div>
       <p data-role="cat-status" class="cat-muted" role="status"></p>
       <label data-role="workspace-field" hidden><span data-copy="workspace"></span><select data-action="workspace"></select></label>
       <div class="cat-conversation" data-role="conversation">
