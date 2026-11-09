@@ -937,8 +937,166 @@ export function activate(host) {
           card.addEventListener("click", () => open(c.id));
           return card;
         }
+        // Project files: artifacts of the project this Cat coordinates, from
+        // Agent Server Projects. Hidden when the Cat leads no project or the
+        // server has no projects API.
+        let filesProjectId = null;
+        let filesControllerId = null;
+        let filesGeneration = 0;
+        let previewName = null;
+        const TEXT_FILE = /\.(md|markdown|txt|json|csv|log|ya?ml|toml|diff|patch)$/i;
+        const artifactPath = (projectId, name) =>
+          `/api/projects/${encodeURIComponent(projectId)}/artifacts${name === undefined ? "" : `/${encodeURIComponent(name)}`}`;
+        function hideFiles() {
+          filesProjectId = null;
+          filesControllerId = null;
+          previewName = null;
+          role("files").hidden = true;
+          role("file-preview").hidden = true;
+        }
+        async function refreshFiles(controllerId) {
+          const generation = ++filesGeneration;
+          const current = () =>
+            alive &&
+            generation === filesGeneration &&
+            state.controller?.id === controllerId;
+          let list;
+          let projectId;
+          try {
+            const projects = await request("/api/projects");
+            const project = (projects?.projects || []).find(
+              (p) =>
+                idKey(p.coordinator_conversation_id) === idKey(controllerId),
+            );
+            if (!project) {
+              if (current()) hideFiles();
+              return;
+            }
+            projectId = project.id;
+            list = await request(artifactPath(projectId));
+          } catch {
+            // An Agent Server without Projects: nothing to show.
+            if (current()) hideFiles();
+            return;
+          }
+          if (!current()) return;
+          if (filesProjectId !== projectId) {
+            previewName = null;
+            role("file-preview").hidden = true;
+          }
+          filesProjectId = projectId;
+          filesControllerId = controllerId;
+          renderFiles(Array.isArray(list?.artifacts) ? list.artifacts : []);
+        }
+        function renderFiles(artifacts) {
+          role("files").hidden = false;
+          role("files-title").textContent = t("filesTitle", {
+            count: artifacts.length,
+          });
+          const focused = document.activeElement?.closest?.(".cat-file")
+            ?.dataset.file;
+          const items = [...artifacts].sort((a, b) =>
+            String(b.updated_at || "").localeCompare(String(a.updated_at || "")),
+          );
+          role("file-list").replaceChildren(
+            ...items.map((artifact) => {
+              const item = document.createElement("li");
+              item.className = "cat-file";
+              item.dataset.file = artifact.name;
+              item.dataset.source = artifact.source;
+              const name = document.createElement("button");
+              name.textContent = artifact.name;
+              name.setAttribute(
+                "aria-expanded",
+                String(previewName === artifact.name),
+              );
+              name.addEventListener("click", () => void togglePreview(artifact.name));
+              const meta = document.createElement("div");
+              meta.className = "cat-file-meta";
+              const source = document.createElement("span");
+              source.className = "cat-file-source";
+              source.textContent = t(
+                artifact.source === "user" ? "fileFromYou" : "fileFromAgent",
+              );
+              const maker =
+                artifact.conversation_id &&
+                board.find((c) => idKey(c.id) === idKey(artifact.conversation_id));
+              if (maker) source.textContent += ` · ${maker.title || maker.id}`;
+              const age = document.createElement("span");
+              age.textContent = relativeAge(artifact.updated_at);
+              meta.append(source, age);
+              item.append(name, meta);
+              return item;
+            }),
+          );
+          if (previewName && !items.some((a) => a.name === previewName)) {
+            previewName = null;
+            role("file-preview").hidden = true;
+          }
+          if (focused)
+            role("file-list")
+              .querySelector(`.cat-file[data-file="${CSS.escape(focused)}"] button`)
+              ?.focus();
+        }
+        async function togglePreview(name) {
+          const preview = role("file-preview");
+          if (previewName === name) {
+            previewName = null;
+            preview.hidden = true;
+          } else {
+            previewName = name;
+            preview.hidden = false;
+            if (!TEXT_FILE.test(name)) preview.textContent = t("fileNoPreview");
+            else {
+              preview.textContent = t("loading");
+              try {
+                const text = await request(artifactPath(filesProjectId, name));
+                if (previewName === name)
+                  preview.textContent =
+                    typeof text === "string"
+                      ? text
+                      : JSON.stringify(text, null, 2);
+              } catch (error) {
+                if (previewName === name)
+                  preview.textContent = t("fileError", {
+                    message: errorText(error),
+                  });
+              }
+            }
+          }
+          role("file-list")
+            .querySelectorAll(".cat-file button")
+            .forEach((button) =>
+              button.setAttribute(
+                "aria-expanded",
+                String(button.textContent === previewName),
+              ),
+            );
+        }
+        async function addFile(file) {
+          const projectId = filesProjectId;
+          const controllerId = state.controller?.id;
+          if (!file || !projectId || !controllerId) return;
+          const body = new FormData();
+          body.append("file", file, file.name);
+          action("add-file").disabled = true;
+          try {
+            await host.agentServer.request({
+              path: artifactPath(projectId),
+              method: "POST",
+              body,
+            });
+          } catch (error) {
+            notice(t("fileError", { message: errorText(error) }));
+          } finally {
+            if (alive) action("add-file").disabled = false;
+          }
+          if (alive) await refreshFiles(controllerId);
+        }
         async function refreshController() {
           const id = state.controller?.id;
+          // Files belong to the Cat that leads the project, never a previous one.
+          if (alive && filesControllerId && filesControllerId !== id) hideFiles();
           if (!id || !alive) return;
           const generation = ++readGeneration;
           clearTimeout(timer);
@@ -1046,6 +1204,7 @@ export function activate(host) {
             if (noticeKind === "controller-read-error")
               notice(savedMutationNotice());
             renderControls();
+            void refreshFiles(id);
           } catch (error) {
             if (alive && generation === readGeneration) {
               state.controllerStatusUnknown = true;
@@ -1309,6 +1468,15 @@ export function activate(host) {
         );
         action("search").addEventListener("input", renderBoard);
         action("project").addEventListener("change", renderBoard);
+        action("add-file").addEventListener("click", () =>
+          action("file-input").click(),
+        );
+        action("file-input").addEventListener("change", () => {
+          const input = action("file-input");
+          const [file] = input.files || [];
+          input.value = "";
+          void addFile(file);
+        });
         action("workspace").addEventListener("change", () => {
           state.workspace = action("workspace").value;
         });

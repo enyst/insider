@@ -1544,3 +1544,127 @@ describe("Insider Cat App", () => {
     expect(app.container.childElementCount).toBe(0);
   });
 });
+
+describe("Insider Cat project files", () => {
+  const projectId = "44444444-4444-4444-8444-444444444444";
+  const files = [
+    {
+      name: "CHANGELOG.md",
+      size: 120,
+      source: "agent",
+      conversation_id: worker.id.replace(/-/g, ""),
+      created_at: "2026-11-09T10:00:00Z",
+      updated_at: "2026-11-09T10:00:00Z",
+    },
+    {
+      name: "board.png",
+      size: 4096,
+      source: "user",
+      conversation_id: null,
+      created_at: "2026-11-09T11:00:00Z",
+      updated_at: "2026-11-09T11:00:00Z",
+    },
+  ];
+  const projectRequests = (extra = () => undefined) => async (call) => {
+    const result = await extra(call);
+    if (result !== undefined) return result;
+    const { path } = call;
+    if (path.startsWith("/api/conversations/search"))
+      return { items: [controller, worker], next_page_id: null };
+    if (path === "/api/projects")
+      return {
+        projects: [
+          {
+            id: projectId,
+            name: "Insider 0.2",
+            coordinator_conversation_id: controller.id.replace(/-/g, ""),
+          },
+        ],
+      };
+    if (path === `/api/projects/${projectId}/artifacts`)
+      return { artifacts: files };
+    if (path === `/api/projects/${projectId}/artifacts/CHANGELOG.md`)
+      return "# 0.2.0-beta.1\n";
+    return undefined;
+  };
+
+  it("lists the files of the project the Cat leads, newest first, by source", async () => {
+    const app = mountApp({ request: projectRequests() });
+    await waitFor(() =>
+      expect(
+        app.container.querySelector('[data-role="files"]').hidden,
+      ).toBe(false),
+    );
+    const rows = [...app.container.querySelectorAll(".cat-file")];
+    expect(rows.map((row) => row.dataset.file)).toEqual([
+      "board.png",
+      "CHANGELOG.md",
+    ]);
+    expect(rows[0].dataset.source).toBe("user");
+    expect(rows[0].textContent).toContain("Added by you");
+    expect(rows[1].textContent).toContain("Made by an agent · Review the project");
+    expect(
+      app.container.querySelector('[data-role="files-title"]').textContent,
+    ).toBe("Project files · 2");
+  });
+
+  it("previews text files and not other types", async () => {
+    const app = mountApp({ request: projectRequests() });
+    await waitFor(() =>
+      expect(app.container.querySelectorAll(".cat-file").length).toBe(2),
+    );
+    const preview = app.container.querySelector('[data-role="file-preview"]');
+    app.container
+      .querySelector('.cat-file[data-file="CHANGELOG.md"] button')
+      .click();
+    await waitFor(() => expect(preview.textContent).toBe("# 0.2.0-beta.1\n"));
+    expect(preview.hidden).toBe(false);
+    app.container
+      .querySelector('.cat-file[data-file="board.png"] button')
+      .click();
+    expect(preview.textContent).toBe("No preview for this file type.");
+    app.container
+      .querySelector('.cat-file[data-file="board.png"] button')
+      .click();
+    expect(preview.hidden).toBe(true);
+  });
+
+  it("uploads an added file to the project and refreshes the list", async () => {
+    let uploaded = null;
+    const app = mountApp({
+      request: projectRequests(({ path, method, body }) => {
+        if (method === "POST" && path === `/api/projects/${projectId}/artifacts`) {
+          uploaded = body;
+          return { name: "notes.txt", source: "user" };
+        }
+        return undefined;
+      }),
+    });
+    await waitFor(() =>
+      expect(app.container.querySelectorAll(".cat-file").length).toBe(2),
+    );
+    const input = find(app, "file-input");
+    const file = new File(["hello"], "notes.txt", { type: "text/plain" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await waitFor(() => expect(uploaded).toBeInstanceOf(FormData));
+    expect(uploaded.get("file").name).toBe("notes.txt");
+  });
+
+  it("stays hidden when the Cat leads no project or the server has no projects", async () => {
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path === "/api/projects") return { projects: [] };
+        return undefined;
+      },
+    });
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith(
+        expect.objectContaining({ path: "/api/projects" }),
+      ),
+    );
+    expect(app.container.querySelector('[data-role="files"]').hidden).toBe(true);
+  });
+});
