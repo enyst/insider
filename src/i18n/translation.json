@@ -2143,5 +2143,39 @@
     "ja": "音声入力を停止しました。ブラウザーがマイクを使用できませんでした。",
     "uk": "Диктування зупинено: браузер не зміг використати мікрофон.",
     "ca": "Dictat aturat: el navegador no ha pogut fer servir el micròfon."
+  },
+  "INSIDER_CAT$PROJECTS_OFF": {
+    "en": "Projects is turned off on this server, so a new Cat has no shared files, memory or updates from its workers.",
+    "zh-CN": "此服务器已关闭“项目”功能，因此新的 Cat 没有共享文件、记忆或来自工作对话的更新。",
+    "de": "Projekte sind auf diesem Server ausgeschaltet. Ein neuer Cat hat daher keine gemeinsamen Dateien, kein Gedächtnis und keine Updates seiner Worker.",
+    "ko-KR": "이 서버에서 프로젝트가 꺼져 있어 새 Cat에는 공유 파일, 메모리, 작업자 업데이트가 없습니다.",
+    "no": "Prosjekter er slått av på denne serveren, så en ny Cat får ingen delte filer, minne eller oppdateringer fra arbeiderne sine.",
+    "zh-TW": "此伺服器已關閉「專案」功能，因此新的 Cat 沒有共用檔案、記憶或來自工作對話的更新。",
+    "it": "I progetti sono disattivati su questo server, quindi un nuovo Cat non ha file condivisi, memoria né aggiornamenti dai suoi worker.",
+    "pt": "Os projetos estão desativados neste servidor, então um novo Cat não tem arquivos compartilhados, memória nem atualizações dos seus workers.",
+    "es": "Los proyectos están desactivados en este servidor, así que un Cat nuevo no tiene archivos compartidos, memoria ni novedades de sus workers.",
+    "ar": "المشاريع متوقفة على هذا الخادم، لذلك لن يحصل Cat الجديد على ملفات مشتركة أو ذاكرة أو تحديثات من محادثات العمل.",
+    "fr": "Les projets sont désactivés sur ce serveur : un nouveau Cat n’aura ni fichiers partagés, ni mémoire, ni nouvelles de ses workers.",
+    "tr": "Bu sunucuda Projeler kapalı; yeni bir Cat'in paylaşılan dosyaları, belleği ve çalışanlarından güncellemeleri olmaz.",
+    "ja": "このサーバーではプロジェクトがオフのため、新しい Cat には共有ファイル、メモリ、ワーカーからの更新がありません。",
+    "uk": "На цьому сервері проєкти вимкнено, тож новий Cat не матиме спільних файлів, пам’яті й оновлень від своїх виконавців.",
+    "ca": "Els projectes estan desactivats en aquest servidor, així que un Cat nou no té fitxers compartits, memòria ni novetats dels seus workers."
+  },
+  "INSIDER_CAT$PROJECTS_SETTINGS": {
+    "en": "Turn it on in Settings › Experimental",
+    "zh-CN": "在“设置 › 实验功能”中开启",
+    "de": "In Einstellungen › Experimentell einschalten",
+    "ko-KR": "설정 › 실험 기능에서 켜기",
+    "no": "Slå det på i Innstillinger › Eksperimentelt",
+    "zh-TW": "在「設定 › 實驗功能」中開啟",
+    "it": "Attivali in Impostazioni › Sperimentali",
+    "pt": "Ative em Configurações › Experimental",
+    "es": "Actívalos en Ajustes › Experimental",
+    "ar": "فعّلها من الإعدادات › تجريبي",
+    "fr": "Activez-les dans Paramètres › Expérimental",
+    "tr": "Ayarlar › Deneysel bölümünden açın",
+    "ja": "設定 › 試験運用でオンにする",
+    "uk": "Увімкніть у Налаштування › Експериментальні",
+    "ca": "Activa'ls a Configuració › Experimental"
   }
 }

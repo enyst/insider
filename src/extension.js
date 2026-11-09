@@ -417,6 +417,8 @@ export function activate(host) {
         let syncDictation = () => {};
         // Project names by their Cat, to name each project in the chooser.
         let projectNamesByCat = new Map();
+        // The server answered 404 on /api/projects: Projects is off there.
+        let projectsOff = false;
         let workspaces = [];
         let workspaceDiscoveryReady = false;
         let workspaceGeneration = 0;
@@ -593,6 +595,8 @@ export function activate(host) {
           action("controller").disabled = state.busy || state.uncertain;
           // A Cat's window belongs to its one project: choosing or starting
           // another project happens on the project list.
+          role("projects-off").hidden =
+            !projectsOff || Boolean(state.controller) || state.newRequested;
           role("picker").hidden =
             Boolean(state.controller) || state.newRequested;
           action("all-projects").hidden =
@@ -996,7 +1000,9 @@ export function activate(host) {
         async function discoverControllers(firstPage, generation) {
           // Project names only label the chooser: never hold discovery up.
           const projectsRead = Promise.race([
-            request("/api/projects").catch(() => null),
+            request("/api/projects").catch((error) =>
+              isNotFound(error) ? { off: true } : null,
+            ),
             new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
           ]);
           let items = [...firstPage.items];
@@ -1019,6 +1025,7 @@ export function activate(host) {
           controllers = unique(items.filter(isController));
           const projects = await projectsRead;
           if (!alive || generation !== boardGeneration) return;
+          projectsOff = projects?.off === true;
           projectNamesByCat = new Map(
             (projects?.projects || [])
               .filter((p) => p?.coordinator_conversation_id && p.name)
@@ -1782,6 +1789,11 @@ export function activate(host) {
           action("draft").value = "";
           notice("");
           renderControls();
+        });
+        action("projects-settings").addEventListener("click", (event) => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+          event.preventDefault();
+          navigate("/settings/experimental");
         });
         action("all-projects").addEventListener("click", () => {
           if (state.busy || state.uncertain) return;

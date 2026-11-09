@@ -476,6 +476,37 @@ describe("Insider Cat work board", () => {
     }
   });
 
+  it("says how to turn Projects on when the server has it off", async () => {
+    const other = {
+      ...controller,
+      id: "99999999-9999-4999-8999-999999999999",
+      title: "Other Cat",
+    };
+    const app = mountApp({
+      request: async ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller, other], next_page_id: null };
+        if (path === "/api/projects")
+          throw Object.assign(new Error("HTTP request failed (404)"), {
+            status: 404,
+          });
+      },
+    });
+    const note = () =>
+      app.container.querySelector('[data-role="projects-off"]');
+    await waitFor(() => expect(note().hidden).toBe(false));
+    expect(note().textContent).toContain(
+      "Projects is turned off on this server",
+    );
+    click(app, "projects-settings");
+    expect(app.host.navigate).toHaveBeenLastCalledWith(
+      "/settings/experimental",
+    );
+    find(app, "controller").value = controller.id;
+    find(app, "controller").dispatchEvent(new Event("change"));
+    expect(note().hidden).toBe(true);
+  });
+
   it("shows what an asking conversation needs on its card", async () => {
     const asking = member({
       ...idle,
