@@ -1,5 +1,7 @@
 # Insider Cat
 
+Your friendly companion for steering your coding projects in Agent Canvas.
+
 ## What is Insider?
 
 Insider Cat is an assistant that lives in Agent Canvas. It has its own
