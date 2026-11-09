@@ -1109,7 +1109,7 @@ describe("Insider Cat work board", () => {
     expect(groups(app)).toEqual([]);
   });
 
-  it("links to report a problem on the GitHub repository", async () => {
+  it("links to send feedback on the GitHub repository", async () => {
     const app = mountApp();
     await waitFor(() =>
       expect(
@@ -1124,9 +1124,9 @@ describe("Insider Cat work board", () => {
     );
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(link.textContent).toBe("Report a problem");
+    expect(link.textContent).toBe("Send feedback");
     expect(link.getAttribute("aria-label")).toBe(
-      "Report a problem — opens in a new tab",
+      "Send feedback — opens in a new tab",
     );
   });
 });
