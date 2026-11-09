@@ -436,6 +436,11 @@ export function activate(host) {
             role("notice").textContent = text;
           }
         };
+        // A screen-reader-only live region for board actions (resolve, reopen)
+        // that move a card between groups without any visible copy.
+        const announceBoard = (text) => {
+          if (alive) role("board-status").textContent = text;
+        };
         const savedMutationNotice = () => {
           const outcome = state.mutationNotice;
           return outcome
@@ -551,6 +556,7 @@ export function activate(host) {
           if (tracking.has(c.id)) return;
           tracking.add(c.id);
           renderBoard();
+          let announce = null;
           try {
             // A tag update replaces the whole set: start from the saved tags.
             const fresh = await request(detailPath(c.id));
@@ -561,6 +567,9 @@ export function activate(host) {
             board = board.map((item) =>
               item.id === c.id ? { ...item, ...fresh, tags } : item,
             );
+            const moved = board.find((item) => item.id === c.id);
+            if (moved)
+              announce = `${moved.title || moved.id} — ${t(groupCopy[groupFor(moved)])}`;
           } catch (error) {
             notice(t("tagError", { message: errorText(error) }));
           } finally {
@@ -574,6 +583,7 @@ export function activate(host) {
                 `[data-card="${c.id}"] [data-action="${focusAction}"]`,
                 moved && `[data-action="group-${groupFor(moved)}"]`,
               );
+              if (announce) announceBoard(announce);
             }
           }
         }
@@ -612,8 +622,10 @@ export function activate(host) {
             const head = document.createElement("button");
             head.className = "cat-group-head";
             head.type = "button";
+            head.id = `group-head-${group.id}`;
             head.dataset.action = `group-${group.id}`;
             head.setAttribute("aria-expanded", String(!collapsed));
+            head.setAttribute("aria-controls", `group-panel-${group.id}`);
             head.textContent = `${t(groupCopy[group.id])} · ${group.items.length}`;
             head.addEventListener("click", () => {
               if (collapsedGroups.has(group.id))
@@ -622,10 +634,15 @@ export function activate(host) {
               renderBoard();
               restoreFocus(`[data-action="group-${group.id}"]`);
             });
-            section.append(head);
-            parent.append(section);
+            const body = document.createElement("div");
+            body.className = "cat-group-body";
+            body.id = `group-panel-${group.id}`;
+            body.setAttribute("role", "group");
+            body.setAttribute("aria-label", t(groupCopy[group.id]));
             if (!collapsed)
-              for (const c of group.items) section.append(card(c));
+              for (const c of group.items) body.append(card(c));
+            section.append(head, body);
+            parent.append(section);
           }
           if (!cards.length) {
             const empty = document.createElement("p");
@@ -780,9 +797,10 @@ export function activate(host) {
           card.className = "cat-card";
           card.dataset.status = c.execution_status || "unknown";
           card.dataset.card = c.id;
-          const title = document.createElement("div");
+          const title = document.createElement("h3");
           title.className = "cat-card-title";
           title.textContent = c.title || c.id;
+          const name = title.textContent;
           const meta = document.createElement("div");
           meta.className = "cat-card-meta";
           const badge = document.createElement("span");
@@ -807,12 +825,17 @@ export function activate(host) {
           const link = document.createElement("button");
           link.dataset.action = "open-worker";
           link.textContent = t("open");
+          link.setAttribute("aria-label", `${t("open")} ${name}`);
           link.addEventListener("click", () => open(c.id));
           buttons.append(link);
           const resolved = isResolved(c);
           const resolve = document.createElement("button");
           resolve.dataset.action = "resolve-worker";
           resolve.textContent = t(resolved ? "reopen" : "resolve");
+          resolve.setAttribute(
+            "aria-label",
+            `${t(resolved ? "reopen" : "resolve")} ${name}`,
+          );
           resolve.disabled = tracking.has(c.id);
           resolve.addEventListener(
             "click",
@@ -839,6 +862,10 @@ export function activate(host) {
               t("prLabel", { label: pr.label }),
               ...words,
             ].join(" · ");
+            prLine.setAttribute(
+              "aria-label",
+              `${prLine.textContent} — ${t("opensNewTab")}`,
+            );
             if (words.length > 1)
               prLine.dataset.checks = pullRequestStatuses.get(
                 pr.url,
