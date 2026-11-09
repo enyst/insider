@@ -218,7 +218,29 @@ export function latestPullRequest(texts) {
     for (const match of String(text || "").matchAll(PR_URL))
       found = {
         url: match[0],
+        owner: match[1],
+        repo: match[2],
+        number: Number(match[3]),
         label: `${match[1]}/${match[2]}#${match[3]}`,
       };
   return found;
+}
+
+/** The words a card shows for a pull request's state and checks. */
+export function pullRequestStatusKeys(status) {
+  if (!status) return [];
+  const state =
+    status.state === "merged"
+      ? "prMerged"
+      : status.state === "closed"
+        ? "prClosed"
+        : status.draft
+          ? "prDraft"
+          : "prOpen";
+  const checks = {
+    success: "checksPass",
+    failure: "checksFail",
+    pending: "checksPending",
+  }[status.checks];
+  return checks && status.state === "open" ? [state, checks] : [state];
 }
