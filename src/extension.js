@@ -835,7 +835,10 @@ export function activate(host) {
             const words = pullRequestStatusKeys(
               pullRequestStatuses.get(pr.url)?.status,
             ).map((k) => t(k));
-            prLine.textContent = [`PR ${pr.label}`, ...words].join(" · ");
+            prLine.textContent = [
+              t("prLabel", { label: pr.label }),
+              ...words,
+            ].join(" · ");
             if (words.length > 1)
               prLine.dataset.checks = pullRequestStatuses.get(
                 pr.url,
