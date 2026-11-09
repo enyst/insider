@@ -140,6 +140,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// The first request a new Cat receives: with Projects it follows the
+// project's creation as the Cat's first message, without it the creation
+// carries it.
+async function firstCatRequest(app) {
+  let text;
+  await waitFor(() => {
+    const calls = app.request.mock.calls.map(([call]) => call);
+    const create = calls.find(
+      (call) => call.method === "POST" && call.path === "/api/conversations",
+    );
+    const sent =
+      create?.body.initial_message ||
+      calls.find(
+        (call) =>
+          call.method === "POST" &&
+          call.path ===
+            `/api/conversations/${create?.body.conversation_id}/events`,
+      )?.body;
+    expect(sent).toBeTruthy();
+    text = sent.content[0].text;
+  });
+  return text;
+}
+
 describe("Insider Cat work board", () => {
   const running = {
     ...worker,
@@ -623,9 +647,7 @@ describe("Insider Cat work board", () => {
     const create = app.request.mock.calls.find(
       ([call]) => call.path === "/api/conversations" && call.method === "POST",
     )[0];
-    expect(create.body.initial_message.content[0].text).not.toContain(
-      "Release 0.2",
-    );
+    expect(await firstCatRequest(app)).not.toContain("Release 0.2");
   });
 
   it("shows the Cat's own work on a backend without Projects", async () => {
@@ -1116,9 +1138,7 @@ describe("Insider Cat work board", () => {
         app.container.querySelector('[data-action="report-problem"]'),
       ).not.toBeNull(),
     );
-    const link = app.container.querySelector(
-      '[data-action="report-problem"]',
-    );
+    const link = app.container.querySelector('[data-action="report-problem"]');
     expect(link.getAttribute("href")).toBe(
       "https://github.com/enyst/insider/issues/new",
     );
@@ -1535,7 +1555,7 @@ describe("Insider Cat App", () => {
     expect(create.body.conversation_id).not.toBe(controller.id);
     expect(create.body.tags).toEqual(controller.tags);
     expect(create.body.workspace).toEqual(worker.workspace);
-    expect(create.body.initial_message.content[0].text).not.toContain("/new");
+    expect(await firstCatRequest(app)).not.toContain("/new");
   });
 
   it("resumes an explicit older Cat link and remembers it across activation", async () => {
@@ -1724,8 +1744,28 @@ describe("Insider Cat App", () => {
       security_analyzer: { kind: "LLMSecurityAnalyzer" },
       max_iterations: 42,
       workspace: { working_dir: "/projects/example" },
-      initial_message: { run: true },
     });
+    // The first request waits for the Cat's project, so the workers the Cat
+    // starts on its first turn join it.
+    expect(create.body).not.toHaveProperty("initial_message");
+    expect(await firstCatRequest(app)).toContain("Explain this work.");
+    const calls = app.request.mock.calls.map(([call]) => call);
+    const projectCreate = calls.findIndex(
+      (call) => call.method === "POST" && call.path === "/api/projects",
+    );
+    expect(calls[projectCreate].body).toEqual({
+      name: "Explain this work.",
+      description: "Explain this work.",
+      coordinator_conversation_id: create.body.conversation_id,
+    });
+    const firstSend = calls.findIndex(
+      (call) =>
+        call.method === "POST" &&
+        call.path ===
+          `/api/conversations/${create.body.conversation_id}/events`,
+    );
+    expect(projectCreate).toBeLessThan(firstSend);
+    expect(calls[firstSend].body).toMatchObject({ role: "user", run: true });
     expect(
       create.body.agent_launch_additions.system_message_suffix_append,
     ).toContain("sibling of SmolPaws");
@@ -1751,6 +1791,69 @@ describe("Insider Cat App", () => {
           call.path === "/api/conversations" && call.method === "POST",
       ),
     ).toHaveLength(1);
+  });
+
+  it("starts the Cat at once and creates no project where Projects is off", async () => {
+    const app = mountApp({
+      request: async ({ path }) => {
+        if (path === "/api/projects")
+          throw Object.assign(new Error("HTTP request failed (404)"), {
+            status: 404,
+          });
+      },
+    });
+    await waitFor(() =>
+      expect(
+        app.container.querySelector('[data-role="projects-off"]').hidden,
+      ).toBe(false),
+    );
+    draft(app, "Explain this work.");
+    click(app, "send");
+    await waitFor(() => expect(find(app, "send").disabled).toBe(false));
+    const calls = app.request.mock.calls.map(([call]) => call);
+    const create = calls.find(
+      (call) => call.method === "POST" && call.path === "/api/conversations",
+    );
+    expect(create.body.initial_message).toMatchObject({ run: true });
+    expect(
+      calls.some(
+        (call) => call.method === "POST" && call.path === "/api/projects",
+      ),
+    ).toBe(false);
+    expect(
+      calls.some((call) =>
+        /\/api\/conversations\/[^/]+\/events$/.test(call.path),
+      ),
+    ).toBe(false);
+  });
+
+  it("still starts the Cat and says so when its project cannot be created", async () => {
+    const app = mountApp({
+      request: async ({ path, method }) => {
+        if (path === "/api/projects" && method === "POST")
+          throw Object.assign(new Error("HTTP request failed (500)"), {
+            status: 500,
+          });
+      },
+    });
+    await waitFor(() =>
+      expect(find(app, "workspace").value).toBe(worker.workspace.working_dir),
+    );
+    draft(app, "Explain this work.");
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "POST",
+          path: expect.stringMatching(/^\/api\/conversations\/[^/]+\/events$/),
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(app.container.textContent).toContain(
+        "The Cat started, but its project could not be created",
+      ),
+    );
   });
 
   it("adds only its owning backend's advertised runtime context without replacing the active profile", async () => {
