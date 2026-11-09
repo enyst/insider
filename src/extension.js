@@ -689,7 +689,7 @@ export function activate(host) {
             boardProject?.id === project?.id &&
             pullRequestStatuses.get(pr.url) === entry;
           request(
-            `/api/git/pull-requests/${encodeURIComponent(pr.owner)}/${encodeURIComponent(pr.repo)}/${pr.number}`,
+            `/api/git/repositories/${encodeURIComponent(pr.owner)}/${encodeURIComponent(pr.repo)}/pull-requests/${pr.number}?provider=github`,
           )
             .then((status) => {
               if (!stillWanted()) return;
@@ -704,13 +704,14 @@ export function activate(host) {
               const code = Number(
                 error?.status ?? error?.response?.status ?? error?.statusCode,
               );
-              // GitHub away or slow: keep what we knew and try again later.
-              if (!code || code >= 500) {
+              // GitHub away, slow or rate-limited: keep what we knew and try
+              // again later.
+              if (!code || code >= 500 || code === 429) {
                 if (entry.status?.state === "open") sweepPullRequestStatuses();
                 return;
               }
-              // No token, no such PR, or no route on an older server: the
-              // card keeps its plain link.
+              // No token (409), no such PR, or no route on an older server:
+              // the card keeps its plain link.
               const had = entry.status;
               entry.status = null;
               if (had) schedulePullRequestRender();
