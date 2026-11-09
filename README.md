@@ -8,17 +8,21 @@ This repository includes the prepared browser bundle, source, skill,
 translations, and tests. Building or installing it does not require Odie's source
 checkout.
 
-The current development build is [App PR #2](https://github.com/enyst/insider/pull/2),
-paired with [Canvas #19495](https://github.com/OpenHands/OpenHands/pull/19495)
+The development branch `gpt/insider-voice-discovery` holds the 0.2.0 **Projects**
+release, App PRs [#5](https://github.com/enyst/insider/pull/5) through
+[#16](https://github.com/enyst/insider/pull/16), paired with
+[Canvas #19495](https://github.com/OpenHands/OpenHands/pull/19495)
 and [Agent Server #5180](https://github.com/OpenHands/software-agent-sdk/pull/5180).
-Projects (conversation sender, reactions, resolved state) come from
+Projects (conversation sender, reactions, resolved state, the `ask` tag, and
+coordinator message copies) come from
 [Agent Server #6602](https://github.com/OpenHands/software-agent-sdk/pull/6602).
 Voice sends spoken requests through the Agent Server's idle-only
 `POST .../voice/messages` from [#6608](https://github.com/OpenHands/software-agent-sdk/pull/6608);
 an Agent Server without it refuses to send them.
-These remain drafts; `main` does not yet contain the full companion and Voice
-behavior described below. Install the reviewed feature branch or a pinned commit
-with compatible Canvas and Agent Server builds.
+See [CHANGELOG.md](CHANGELOG.md) for the release notes. The release remains a
+draft; `main` does not yet contain the companion and Voice behavior described
+below. Install the reviewed feature branch or a pinned commit with compatible
+Canvas and Agent Server builds.
 
 ## Install in Canvas
 
@@ -49,7 +53,8 @@ dependencies or run a build.
   rests, wakes, listens, speaks, and works as its state changes. Conversation
   browsing sits under **Your work**; the page has one set of voice controls.
   Reduced motion is supported, and errors and approval requests remain visible
-  as text alongside the Cat's pose.
+  as text alongside the Cat's pose. The App follows light Canvas themes such as
+  Paper and keeps its dark palette on dark themes.
 - Browse conversations with workspace and title/ID filters, manual refresh, and
   explicit pagination. Filters apply to loaded conversations; the page shows its
   coverage. Approval requests, errors, paused work, and ended runs have distinct
@@ -104,11 +109,23 @@ dependencies or run a build.
   Automatic call cleanup for regular-view compaction requires the host's
   `onConversationContextChangeRequested` capability. Without it, end voice
   before compacting in the regular view and restart afterwards.
+- Messages from other conversations are folded into labelled rows with a live
+  card for the sender: a message another conversation sent, a coordinator's
+  `[Update from ...]` report, and the person's copied message or a worker's
+  reply from a project conversation. A copied person message reads "You, in
+  another conversation"; the rest read "Another conversation".
+- Emoji reactions appear as chips under the message they target, with the emoji
+  and who reacted as the accessible label and tooltip.
+- A conversation that ended its turn on a question (`turn=asked`) groups under
+  **Needs you** and shows the question on its card, so you see what it needs
+  without opening it.
 
 Selecting a worker provides context to the Cat; it does not send that worker a
 message. Coordination depends on the tools supplied by the chosen profile. This
 App adds no worker dispatcher, scheduler, or shared SmolPaws memory; the
-skill asks the Cat to tag workers it starts so the page can track them.
+skill asks the Cat to tag workers it starts so the page can track them, to
+delegate substantial work to those conversations, and to open each written
+message by naming itself and noting that it approves nothing.
 
 Drafts survive navigation while the App remains active. They are not saved
 across browser reloads, App disablement, or backend switches. If a send has an
