@@ -1108,6 +1108,27 @@ describe("Insider Cat work board", () => {
     );
     expect(groups(app)).toEqual([]);
   });
+
+  it("links to report a problem on the GitHub repository", async () => {
+    const app = mountApp();
+    await waitFor(() =>
+      expect(
+        app.container.querySelector('[data-action="report-problem"]'),
+      ).not.toBeNull(),
+    );
+    const link = app.container.querySelector(
+      '[data-action="report-problem"]',
+    );
+    expect(link.getAttribute("href")).toBe(
+      "https://github.com/enyst/insider/issues/new",
+    );
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(link.textContent).toBe("Report a problem");
+    expect(link.getAttribute("aria-label")).toBe(
+      "Report a problem — opens in a new tab",
+    );
+  });
 });
 
 describe("Insider Cat App", () => {

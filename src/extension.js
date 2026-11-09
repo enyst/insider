@@ -448,6 +448,12 @@ export function activate(host) {
         });
         const action = (name) => root.querySelector(`[data-action="${name}"]`);
         const role = (name) => root.querySelector(`[data-role="${name}"]`);
+        action("report-problem").href =
+          "https://github.com/enyst/insider/issues/new";
+        action("report-problem").setAttribute(
+          "aria-label",
+          `${t("reportProblem")} — ${t("opensNewTab")}`,
+        );
         action("draft").placeholder = t("placeholder");
         action("draft").value = state.draft;
         const pageVoice = mountCatVoice({

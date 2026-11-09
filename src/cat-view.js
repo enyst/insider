@@ -238,6 +238,8 @@ export const catViewStyles = `
 .insider-app .cat-empty{display:grid;gap:8px;justify-items:start;border:1px dashed var(--cat-line);border-radius:14px;padding:22px;background:var(--cat-wash)}
 .insider-app .cat-empty-title{font-size:14px;font-weight:600}
 .insider-app .cat-empty-hint{font-size:13px;color:var(--cat-muted);overflow-wrap:anywhere}
+.insider-app .cat-report{justify-self:start;margin-block-start:2px;font-size:12px;color:var(--cat-muted);text-decoration:underline;text-underline-offset:3px}
+.insider-app .cat-report:hover{color:var(--cat-accent)}
 .insider-app .cat-group{display:grid}
 .insider-app .cat-group-body{display:grid}
 .insider-app .cat-group-head{justify-self:start;border:0;background:none;padding:12px 0 6px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--cat-muted);cursor:pointer}
@@ -319,5 +321,6 @@ export const catPageMarkup = `<style>${catViewStyles}</style>
         <ul data-role="file-list" class="cat-file-list"></ul>
         <pre data-role="file-preview" class="cat-file-preview" tabindex="0" hidden></pre>
       </section>
+      <a data-action="report-problem" class="cat-report" data-copy="reportProblem" target="_blank" rel="noopener noreferrer"></a>
     </section>
   </div>`;

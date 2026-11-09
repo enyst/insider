@@ -339,6 +339,23 @@
     "zh-CN": "没有符合当前视图的对话。",
     "zh-TW": "沒有符合目前檢視的對話。"
   },
+  "INSIDER_CAT$REPORT_PROBLEM": {
+    "ar": "الإبلاغ عن مشكلة",
+    "ca": "Informa d'un problema",
+    "de": "Problem melden",
+    "en": "Report a problem",
+    "es": "Informar de un problema",
+    "fr": "Signaler un problème",
+    "it": "Segnala un problema",
+    "ja": "問題を報告",
+    "ko-KR": "문제 보고",
+    "no": "Rapporter et problem",
+    "pt": "Reportar um problema",
+    "tr": "Sorun bildir",
+    "uk": "Повідомити про проблему",
+    "zh-CN": "报告问题",
+    "zh-TW": "回報問題"
+  },
   "INSIDER_CAT$EMPTY_FIRST_RUN_TITLE": {
     "ar": "لا شيء على اللوحة بعد",
     "ca": "Encara no hi ha res al tauler",
