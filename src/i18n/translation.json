@@ -2126,5 +2126,22 @@
     "ja": "音声入力",
     "uk": "Диктувати",
     "ca": "Dictar"
+  },
+  "INSIDER_CAT$DICTATION_FAILED": {
+    "en": "Dictation stopped: the browser couldn't use the microphone.",
+    "zh-CN": "听写已停止：浏览器无法使用麦克风。",
+    "de": "Diktat beendet: Der Browser konnte das Mikrofon nicht verwenden.",
+    "ko-KR": "받아쓰기가 중지되었습니다. 브라우저가 마이크를 사용할 수 없습니다.",
+    "no": "Diktering stoppet: nettleseren fikk ikke brukt mikrofonen.",
+    "zh-TW": "聽寫已停止：瀏覽器無法使用麥克風。",
+    "it": "Dettatura interrotta: il browser non ha potuto usare il microfono.",
+    "pt": "Ditado interrompido: o navegador não conseguiu usar o microfone.",
+    "es": "Dictado detenido: el navegador no pudo usar el micrófono.",
+    "ar": "توقف الإملاء: تعذّر على المتصفح استخدام الميكروفون.",
+    "fr": "Dictée arrêtée : le navigateur n’a pas pu utiliser le micro.",
+    "tr": "Dikte durdu: tarayıcı mikrofonu kullanamadı.",
+    "ja": "音声入力を停止しました。ブラウザーがマイクを使用できませんでした。",
+    "uk": "Диктування зупинено: браузер не зміг використати мікрофон.",
+    "ca": "Dictat aturat: el navegador no ha pogut fer servir el micròfon."
   }
 }

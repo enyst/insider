@@ -412,6 +412,9 @@ export function activate(host) {
           ),
         );
         let controllers = [];
+        let dictation = null;
+        let stopDictation = () => {};
+        let syncDictation = () => {};
         // Project names by their Cat, to name each project in the chooser.
         let projectNamesByCat = new Map();
         let workspaces = [];
@@ -451,53 +454,73 @@ export function activate(host) {
         });
         role("conversation").title = t("partialHistory");
         // Dictation, as in OpenHands: the browser's speech recognition types
-        // into the draft. It is not the real-time Voice call.
+        // into the draft. It is not the real-time Voice call, and the two
+        // never share the microphone.
         const Recognition =
           globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
-        let dictation = null;
         const dictate = action("dictate");
         dictate.innerHTML = `${MICROPHONE_ICON}<span class="cat-sr-only"></span>`;
         dictate.querySelector("span").textContent = t("dictate");
         dictate.title = t("dictate");
-        dictate.hidden = !Recognition;
-        const stopDictation = () => {
+        const callLive = () =>
+          !["idle", "error"].includes(voice.getSnapshot().status);
+        stopDictation = (abort = false) => {
           const current = dictation;
           dictation = null;
           dictate.setAttribute("aria-pressed", "false");
-          current?.stop();
+          if (abort) current?.abort?.();
+          else current?.stop();
+        };
+        syncDictation = () => {
+          const live = callLive();
+          if (live && dictation) stopDictation(true);
+          dictate.hidden = !Recognition || live;
         };
         dictate.addEventListener("click", () => {
           if (dictation) return stopDictation();
-          if (!Recognition) return;
+          if (!Recognition || callLive()) return;
           const recognition = new Recognition();
           recognition.lang =
-            document.documentElement.lang || navigator.language;
+            root.closest("[lang]")?.lang || navigator.language || "en";
           recognition.interimResults = false;
           recognition.continuous = true;
           recognition.onresult = (event) => {
+            if (!alive || dictation !== recognition) return;
+            const draft = action("draft");
             for (let i = event.resultIndex; i < event.results.length; i++) {
               if (!event.results[i].isFinal) continue;
               const words = event.results[i][0].transcript.trim();
               if (!words) continue;
-              const draft = action("draft");
               draft.value = draft.value
                 ? `${draft.value.replace(/\s+$/, "")} ${words}`
                 : words;
-              state.draft = draft.value;
             }
+            // Through the usual path, so the draft is saved as if typed.
+            draft.dispatchEvent(new Event("input", { bubbles: true }));
           };
           recognition.onend = () => {
             if (dictation === recognition) stopDictation();
           };
-          recognition.onerror = recognition.onend;
+          recognition.onerror = (event) => {
+            if (dictation !== recognition) return;
+            stopDictation(true);
+            if (
+              alive &&
+              event?.error &&
+              !["no-speech", "aborted"].includes(event.error)
+            )
+              notice(t("dictationFailed"));
+          };
           dictation = recognition;
           dictate.setAttribute("aria-pressed", "true");
           try {
             recognition.start();
           } catch {
-            stopDictation();
+            stopDictation(true);
+            notice(t("dictationFailed"));
           }
         });
+        syncDictation();
         container.append(root);
         const request = (path, method = "GET", body) =>
           host.agentServer.request({
@@ -561,6 +584,7 @@ export function activate(host) {
               (controllers.length > 1 || state.choosingProject));
           action("send").textContent = t(state.busy ? "sending" : "send");
           action("checked").hidden = !state.uncertain;
+          syncDictation();
           action("new-cat").disabled =
             state.busy || state.uncertain || !discoveryReady;
           action("controller").disabled = state.busy || state.uncertain;
@@ -1839,7 +1863,7 @@ export function activate(host) {
           ++boardGeneration;
           clearTimeout(timer);
           clearTimeout(pullRequestRender);
-          stopDictation();
+          stopDictation(true);
           clearTimeout(pullRequestSweep);
           root.remove();
           if (disposeCurrent === dispose) disposeCurrent = null;

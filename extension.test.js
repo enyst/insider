@@ -442,6 +442,15 @@ describe("Insider Cat work board", () => {
       expect(find(app, "draft").value).toBe("Please ship it");
       click(app, "dictate");
       expect(find(app, "dictate").getAttribute("aria-pressed")).toBe("false");
+      // A refused microphone says so instead of silently turning off.
+      click(app, "dictate");
+      started[1].onerror({ error: "not-allowed" });
+      expect(find(app, "dictate").getAttribute("aria-pressed")).toBe("false");
+      await waitFor(() =>
+        expect(app.container.textContent).toContain(
+          "Dictation stopped: the browser couldn't use the microphone.",
+        ),
+      );
     } finally {
       delete globalThis.webkitSpeechRecognition;
     }
