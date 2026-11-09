@@ -231,6 +231,15 @@ export const catViewStyles = `
 .insider-app .cat-target{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--cat-tint);border-radius:10px;border-inline-start:2px solid var(--cat-accent);font-size:12px;min-width:0}
 .insider-app .cat-target>span{min-width:0;overflow-wrap:anywhere;flex:1}
 .insider-app .cat-target button{font-size:12px;flex-shrink:0}
+.insider-app .cat-files{display:grid;gap:8px;border-block-start:1px solid var(--cat-line);padding-block-start:16px}
+.insider-app .cat-files h3{font-size:12px;font-weight:600;letter-spacing:.02em}
+.insider-app .cat-file-list{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.insider-app .cat-file{display:grid;gap:2px;padding:8px 0;min-width:0}
+.insider-app .cat-file button{justify-self:start;border:0;padding:0;min-height:32px;font-weight:550;text-align:start;overflow-wrap:anywhere;color:var(--cat-text)}
+.insider-app .cat-file button[aria-expanded=true]{color:var(--cat-accent)}
+.insider-app .cat-file-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--cat-muted)}
+.insider-app .cat-file[data-source=user] .cat-file-source{color:var(--cat-accent)}
+.insider-app .cat-file-preview{margin:0;max-height:320px;overflow:auto;padding:12px;border:1px solid var(--cat-line);border-radius:10px;background:var(--cat-wash);font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .insider-app .cat-notice{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
 .insider-app .cat-notice:empty{display:none}
 .insider-app .cat-sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -269,5 +278,11 @@ export const catPageMarkup = `<style>${catViewStyles}</style>
       <div class="cat-work-head"><h2 data-copy="workTitle"></h2><button data-action="refresh" data-copy="refresh"></button></div>
       <div class="cat-filters"><input data-action="search" type="search"><select data-action="project"></select><select data-action="scope" hidden></select></div>
       <p data-role="coverage" class="cat-muted" role="status"></p><div data-role="cards" class="cat-cards"></div><button data-action="load-more" data-copy="loadMore" hidden></button>
+      <section class="cat-files" data-role="files" hidden>
+        <div class="cat-work-head"><h3 data-role="files-title"></h3><button data-action="add-file" data-copy="addFile"></button></div>
+        <input data-action="file-input" type="file" hidden>
+        <ul data-role="file-list" class="cat-file-list"></ul>
+        <pre data-role="file-preview" class="cat-file-preview" tabindex="0" hidden></pre>
+      </section>
     </section>
   </div>`;
