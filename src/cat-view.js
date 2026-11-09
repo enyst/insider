@@ -12,6 +12,7 @@ export function mountCatVoice({
   navigate,
   compact = false,
   conversationControls = null,
+  actionsTarget = null,
 }) {
   const root = document.createElement("section");
   root.className = `cat-voice-view${compact ? " cat-voice-compact" : ""}`;
@@ -23,12 +24,22 @@ export function mountCatVoice({
     <div class="cat-voice-actions"><button data-action="${compact ? "start" : "voice-start"}" class="cat-talk"></button><button data-action="mute"></button><button data-action="interrupt"></button><button data-action="end"></button><button data-action="setup" hidden></button>${compact ? '<button data-action="open"></button>' : ""}</div>
     <p data-role="voice-help" class="cat-muted" hidden></p>
     <details data-role="transcripts" class="cat-transcripts" hidden><summary></summary><div data-role="transcript-lines"></div></details>`;
-  const action = (name) => root.querySelector(`[data-action="${name}"]`);
+  // The call controls may move next to Send, outside this view's root.
+  const actions = root.querySelector(".cat-voice-actions");
+  const action = (name) =>
+    actions.querySelector(`[data-action="${name}"]`) ||
+    root.querySelector(`[data-action="${name}"]`);
   const role = (name) => root.querySelector(`[data-role="${name}"]`);
-  if (conversationControls)
-    root.querySelector(".cat-voice-actions").before(conversationControls);
+  if (conversationControls) actions.before(conversationControls);
   const startButton = action(compact ? "start" : "voice-start");
-  startButton.textContent = t("voiceStart");
+  if (actionsTarget) {
+    // Beside Send, as an icon: a waveform for the real-time conversation,
+    // apart from the microphone that only dictates into the draft.
+    startButton.classList.add("cat-icon-button");
+    startButton.innerHTML = `${WAVEFORM_ICON}<span class="cat-sr-only"></span>`;
+    startButton.querySelector("span").textContent = t("voiceRealtime");
+    startButton.title = t("voiceRealtime");
+  } else startButton.textContent = t("voiceStart");
   startButton.onclick = start;
   action("mute").onclick = () => voice.setMuted(!voice.getSnapshot().muted);
   action("interrupt").onclick = () =>
@@ -145,9 +156,24 @@ export function mountCatVoice({
     );
   };
   container.append(root);
+  // Move the call controls next to Send; they keep working from there.
+  if (actionsTarget)
+    actionsTarget.insertBefore(
+      actions,
+      actionsTarget.querySelector('[data-action="send"]'),
+    );
   sync();
   return { root, sync };
 }
+
+const svg = (paths) =>
+  `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
+export const WAVEFORM_ICON = svg(
+  '<path d="M4 10v4"/><path d="M8 7v10"/><path d="M12 4v16"/><path d="M16 7v10"/><path d="M20 10v4"/>',
+);
+export const MICROPHONE_ICON = svg(
+  '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
+);
 
 export const catViewStyles = `
 .insider-app,.insider-voice{--cat-bg:var(--oh-surface,#20211f);--cat-line:var(--oh-border,#42443f);--cat-text:var(--oh-foreground,#efeee7);--cat-muted:light-dark(var(--oh-muted,#675e54),#b4b7ae);--cat-accent:light-dark(var(--oh-accent,#9b4428),#cad7b4);--cat-ink:light-dark(var(--oh-accent-foreground,#fffaf2),#252e20);--cat-accent-hover:light-dark(color-mix(in srgb,var(--cat-accent) 85%,#000),#d7e3c2);--cat-warn:light-dark(var(--oh-feedback-warning,#705515),#f0c697);--cat-error:light-dark(var(--oh-feedback-error,#a12c2a),#f4aaa0);--cat-tint:color-mix(in srgb,var(--cat-accent) 4%,transparent);--cat-wash:color-mix(in srgb,currentColor 3%,transparent);color:var(--cat-text);font:14px/1.5 system-ui,sans-serif}
@@ -203,6 +229,11 @@ export const catViewStyles = `
 .insider-app textarea{width:100%;min-height:84px;max-height:260px;resize:vertical;border:0;padding:6px;background:transparent}
 .insider-app textarea:focus-visible{outline:0}
 .insider-app .cat-composer .cat-controls{justify-content:flex-end}
+.insider-app .cat-composer .cat-voice-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.insider-app .cat-icon-button{display:inline-grid;place-items:center;min-width:44px;padding:0 10px}
+.insider-app .cat-talk.cat-icon-button{border-radius:999px;background:var(--cat-tint);color:var(--cat-accent);border-color:var(--cat-accent)}
+.insider-app .cat-talk.cat-icon-button:enabled:hover{background:var(--cat-accent);color:var(--cat-ink)}
+.insider-app .cat-dictate[aria-pressed=true]{border-color:var(--cat-accent);color:var(--cat-accent);background:var(--cat-tint)}
 .insider-app .cat-work-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .insider-app .cat-work-head button{font-size:12px;border:0;color:var(--cat-muted)}
 .insider-app .cat-cards{display:grid;gap:4px}
@@ -274,7 +305,7 @@ export const catPageMarkup = `<style>${catViewStyles}</style>
         <div class="cat-history-head"><h3 data-copy="recent"></h3><button data-action="open-controller" data-copy="full" hidden></button></div>
         <div data-role="history" class="cat-history"></div>
       </div>
-      <div class="cat-composer"><label><span data-copy="draft" class="cat-sr-only"></span><textarea data-action="draft"></textarea></label><div class="cat-controls"><button data-action="send" data-copy="send" class="cat-primary"></button></div></div>
+      <div class="cat-composer"><label><span data-copy="draft" class="cat-sr-only"></span><textarea data-action="draft"></textarea></label><div class="cat-controls" data-role="composer-controls"><button data-action="dictate" class="cat-icon-button cat-dictate" aria-pressed="false" hidden></button><button data-action="send" data-copy="send" class="cat-primary"></button></div></div>
       <p data-role="notice" class="cat-notice" role="status" aria-live="polite"></p><button data-action="checked" data-copy="checked" hidden></button>
     </section>
     <section class="cat-stack cat-work">

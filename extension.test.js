@@ -416,6 +416,46 @@ describe("Insider Cat work board", () => {
     expect(find(app, "send").disabled).toBe(true);
   });
 
+  it("dictates into the draft with the microphone, apart from real-time voice", async () => {
+    const started = [];
+    globalThis.webkitSpeechRecognition = class {
+      start() {
+        started.push(this);
+      }
+      stop() {
+        this.onend?.();
+      }
+    };
+    try {
+      const app = mountApp({ request: projectWorld([member(running)]) });
+      await waitFor(() => expect(find(app, "dictate").hidden).toBe(false));
+      expect(find(app, "voice-start").closest(".cat-composer")).not.toBeNull();
+      find(app, "draft").value = "Please";
+      click(app, "dictate");
+      expect(find(app, "dictate").getAttribute("aria-pressed")).toBe("true");
+      started[0].onresult({
+        resultIndex: 0,
+        results: [
+          Object.assign([{ transcript: " ship it " }], { isFinal: true }),
+        ],
+      });
+      expect(find(app, "draft").value).toBe("Please ship it");
+      click(app, "dictate");
+      expect(find(app, "dictate").getAttribute("aria-pressed")).toBe("false");
+      // A refused microphone says so instead of silently turning off.
+      click(app, "dictate");
+      started[1].onerror({ error: "not-allowed" });
+      expect(find(app, "dictate").getAttribute("aria-pressed")).toBe("false");
+      await waitFor(() =>
+        expect(app.container.textContent).toContain(
+          "Dictation stopped: the browser couldn't use the microphone.",
+        ),
+      );
+    } finally {
+      delete globalThis.webkitSpeechRecognition;
+    }
+  });
+
   it("shows what an asking conversation needs on its card", async () => {
     const asking = member({
       ...idle,

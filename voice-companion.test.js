@@ -65,7 +65,9 @@ describe("Voice companion", () => {
       const query = (action) =>
         container.querySelector(`[data-action="${action}"]`);
       await waitFor(() => expect(query("controller").options.length).toBe(3));
-      expect(query("voice-start").textContent).toBe("voiceStart");
+      expect(query("voice-start").textContent).toBe("voiceRealtime");
+      // Beside Send, with the composer, not at the top of the page.
+      expect(query("voice-start").closest(".cat-composer")).not.toBeNull();
       expect(query("voice-start").disabled).toBe(true);
       expect(container.textContent).toContain("voiceChoose");
       query("voice-start").click();
