@@ -89,7 +89,7 @@ function mountApp(overrides = {}) {
       kind: "local",
       orgId: null,
     },
-    extension: { name: "insider-cat", version: "0.1.0", resolvedRef: null },
+    extension: { name: "insider-cat", version: "0.2.0-beta.1", resolvedRef: null },
     registerPage: vi.fn((id, factory) => {
       expect(id).toBe("projects");
       mount = factory;
