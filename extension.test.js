@@ -235,6 +235,59 @@ describe("Insider Cat work board", () => {
     ).not.toContain("/projects/example");
   });
 
+  it("keeps the project board when its files can't be read", async () => {
+    const app = mountApp({
+      request: projectWorld([member(running)], ({ path }) => {
+        if (path === `/api/projects/${project.id}/artifacts`)
+          throw Object.assign(new Error("HTTP request failed (500)"), {
+            status: 500,
+          });
+      }),
+    });
+    await waitFor(() =>
+      expect(groups(app)).toEqual([["working", [running.title]]]),
+    );
+    expect(app.container.querySelector('[data-role="files"]').hidden).toBe(
+      true,
+    );
+    draft(app, "What is left?");
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: `/api/conversations/${controller.id}/events`,
+          method: "POST",
+        }),
+      ),
+    );
+    const sent = app.request.mock.calls.find(
+      ([call]) => call.path === `/api/conversations/${controller.id}/events`,
+    )[0];
+    expect(JSON.stringify(sent.body)).toContain("Release 0.2");
+  });
+
+  it("does not carry a project into a new Cat", async () => {
+    const app = mountApp({ request: projectWorld([member(running)]) });
+    await waitFor(() =>
+      expect(groups(app)).toEqual([["working", [running.title]]]),
+    );
+    click(app, "new-cat");
+    expect(groups(app)).toEqual([]);
+    draft(app, "Start fresh.");
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith(
+        expect.objectContaining({ path: "/api/conversations", method: "POST" }),
+      ),
+    );
+    const create = app.request.mock.calls.find(
+      ([call]) => call.path === "/api/conversations" && call.method === "POST",
+    )[0];
+    expect(create.body.initial_message.content[0].text).not.toContain(
+      "Release 0.2",
+    );
+  });
+
   it("shows the Cat's own work on a backend without Projects", async () => {
     const other = {
       ...controller,

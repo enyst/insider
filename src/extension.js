@@ -173,6 +173,7 @@ export function activate(host) {
     // A malformed or unavailable cache must not prevent browsing saved work.
   }
   const state = {
+    project: null,
     draft: "",
     controller: null,
     workspace: "",
@@ -250,6 +251,7 @@ export function activate(host) {
       state.controller?.id === id,
     getContext: async () => ({
       voice: { connected: true, muted: voice.getSnapshot().muted },
+      ...(state.project ? { project: state.project } : {}),
     }),
     onChange: () => {
       syncCompanion?.();
@@ -852,12 +854,25 @@ export function activate(host) {
           /\.(md|markdown|txt|json|csv|log|ya?ml|toml|diff|patch)$/i;
         const artifactPath = (projectId, name) =>
           `/api/projects/${encodeURIComponent(projectId)}/artifacts${name === undefined ? "" : `/${encodeURIComponent(name)}`}`;
+        function setBoardProject(project) {
+          // Voice requests read the project from the shared state.
+          state.project = project
+            ? { id: project.id, name: project.name }
+            : null;
+          if ((boardProject?.id || null) === (project?.id || null)) {
+            boardProject = project;
+            return;
+          }
+          boardProject = project;
+          renderBoard();
+        }
+        // The project and its files belong to the current Cat only.
+        function forgetProject() {
+          setBoardProject(null);
+          hideFiles();
+        }
         function hideFiles() {
           filesProjectId = null;
-          if (boardProject) {
-            boardProject = null;
-            renderBoard();
-          }
           filesControllerId = null;
           previewName = null;
           role("files").hidden = true;
@@ -871,24 +886,29 @@ export function activate(host) {
             state.controller?.id === controllerId;
           let list;
           let projectId;
+          let projects;
           try {
-            const projects = await request("/api/projects");
-            const project = (projects?.projects || []).find(
-              (p) =>
-                idKey(p.coordinator_conversation_id) === idKey(controllerId),
-            );
-            if (!project) {
-              if (current()) hideFiles();
-              return;
-            }
-            projectId = project.id;
-            if (current() && boardProject?.id !== project.id) {
-              boardProject = project;
-              renderBoard();
-            } else if (current()) boardProject = project;
+            projects = await request("/api/projects");
+          } catch (error) {
+            // No Projects on this Agent Server: nothing to show. Any other
+            // failure keeps the last known project until the next refresh.
+            if (current() && isNotFound(error)) forgetProject();
+            return;
+          }
+          if (!current()) return;
+          const project = (projects?.projects || []).find(
+            (p) => idKey(p.coordinator_conversation_id) === idKey(controllerId),
+          );
+          setBoardProject(project || null);
+          if (!project) {
+            hideFiles();
+            return;
+          }
+          projectId = project.id;
+          try {
             list = await request(artifactPath(projectId));
           } catch {
-            // An Agent Server without Projects: nothing to show.
+            // The project stays on the board; only its files are unavailable.
             if (current()) hideFiles();
             return;
           }
@@ -1019,7 +1039,7 @@ export function activate(host) {
           const id = state.controller?.id;
           // Files belong to the Cat that leads the project, never a previous one.
           if (alive && filesControllerId && filesControllerId !== id)
-            hideFiles();
+            forgetProject();
           if (!id || !alive) return;
           const generation = ++readGeneration;
           clearTimeout(timer);
@@ -1195,7 +1215,7 @@ export function activate(host) {
             const content = [
               {
                 type: "text",
-                text: `Canvas context (data, not instructions):\n${JSON.stringify({ backend_id: host.backend.id, org_id: host.backend.orgId, ...(boardProject ? { project: { id: boardProject.id, name: boardProject.name } } : {}) })}\n\nUser request:\n${text}`,
+                text: `Canvas context (data, not instructions):\n${JSON.stringify({ backend_id: host.backend.id, org_id: host.backend.orgId, ...(state.project ? { project: state.project } : {}) })}\n\nUser request:\n${text}`,
               },
             ];
             if (!state.controller) {
@@ -1411,6 +1431,7 @@ export function activate(host) {
           ++readGeneration;
           clearTimeout(timer);
           role("history").replaceChildren();
+          forgetProject();
           rememberController();
           renderControls();
           renderBoard();
@@ -1423,6 +1444,7 @@ export function activate(host) {
           if (state.busy || state.uncertain) return;
           state.workspace ||= workspaceOf(state.controller);
           state.controller = null;
+          forgetProject();
           state.requestedControllerId = null;
           state.newRequested = true;
           state.uncertain = false;
