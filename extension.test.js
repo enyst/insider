@@ -507,6 +507,36 @@ describe("Insider Cat work board", () => {
     expect(note().hidden).toBe(true);
   });
 
+  it("brings new parts onto the board without Refresh", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let items = [member(running)];
+      const app = mountApp({
+        request: projectWorld([], ({ path }) => {
+          if (path.startsWith("/api/conversations/search"))
+            return { items: [controller, ...items], next_page_id: null };
+        }),
+      });
+      await waitFor(() =>
+        expect(groups(app)).toEqual([["working", [running.title]]]),
+      );
+      items = [member(running), member(worker)];
+      await vi.advanceTimersByTimeAsync(21_000);
+      await waitFor(() =>
+        expect(groups(app)).toEqual([
+          ["needsYou", [worker.title]],
+          ["working", [running.title]],
+        ]),
+      );
+      // A background read shows no loading text.
+      expect(
+        app.container.querySelector('[data-role="coverage"]').textContent,
+      ).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows what an asking conversation needs on its card", async () => {
     const asking = member({
       ...idle,

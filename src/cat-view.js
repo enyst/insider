@@ -32,14 +32,12 @@ export function mountCatVoice({
   const role = (name) => root.querySelector(`[data-role="${name}"]`);
   if (conversationControls) actions.before(conversationControls);
   const startButton = action(compact ? "start" : "voice-start");
-  if (actionsTarget) {
-    // Beside Send, as an icon: a waveform for the real-time conversation,
-    // apart from the microphone that only dictates into the draft.
-    startButton.classList.add("cat-icon-button");
-    startButton.innerHTML = `${WAVEFORM_ICON}<span class="cat-sr-only"></span>`;
-    startButton.querySelector("span").textContent = t("voiceRealtime");
-    startButton.title = t("voiceRealtime");
-  } else startButton.textContent = t("voiceStart");
+  // One look everywhere: a waveform for the real-time conversation, apart
+  // from the microphone that only dictates into the draft.
+  startButton.classList.add("cat-icon-button");
+  startButton.innerHTML = `${WAVEFORM_ICON}<span class="cat-sr-only"></span>`;
+  startButton.querySelector("span").textContent = t("voiceRealtime");
+  startButton.title = t("voiceRealtime");
   startButton.onclick = start;
   action("mute").onclick = () => voice.setMuted(!voice.getSnapshot().muted);
   action("interrupt").onclick = () =>
@@ -230,9 +228,9 @@ export const catViewStyles = `
 .insider-app textarea:focus-visible{outline:0}
 .insider-app .cat-composer .cat-controls{justify-content:flex-end}
 .insider-app .cat-composer .cat-voice-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.insider-app .cat-icon-button{display:inline-grid;place-items:center;min-width:44px;padding:0 10px}
-.insider-app .cat-talk.cat-icon-button{border-radius:999px;background:var(--cat-tint);color:var(--cat-accent);border-color:var(--cat-accent)}
-.insider-app .cat-talk.cat-icon-button:enabled:hover{background:var(--cat-accent);color:var(--cat-ink)}
+.insider-app .cat-icon-button,.insider-voice .cat-icon-button{display:inline-grid;place-items:center;min-width:44px;padding:0 10px}
+.insider-app .cat-talk.cat-icon-button,.insider-voice .cat-talk.cat-icon-button{border-radius:999px;background:var(--cat-tint);color:var(--cat-accent);border-color:var(--cat-accent)}
+.insider-app .cat-talk.cat-icon-button:enabled:hover,.insider-voice .cat-talk.cat-icon-button:enabled:hover{background:var(--cat-accent);color:var(--cat-ink)}
 .insider-app .cat-dictate[aria-pressed=true]{border-color:var(--cat-accent);color:var(--cat-accent);background:var(--cat-tint)}
 .insider-app .cat-work-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .insider-app .cat-work-head button{font-size:12px;border:0;color:var(--cat-muted)}
@@ -280,7 +278,7 @@ export const catViewStyles = `
 .insider-app .cat-file-preview{margin:0;max-height:320px;overflow:auto;padding:12px;border:1px solid var(--cat-line);border-radius:10px;background:var(--cat-wash);font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .insider-app .cat-notice{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
 .insider-app .cat-notice:empty{display:none}
-.insider-app .cat-sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.insider-app .cat-sr-only,.insider-voice .cat-sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .insider-voice{box-sizing:border-box;width:min(540px,calc(100vw - 32px));max-width:calc(100% - 32px);margin:8px 16px 12px;padding:10px 14px;border:1px solid var(--cat-line);border-radius:16px;background:var(--cat-bg)}
 .insider-voice .cat-voice-compact{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
 .insider-voice .cat-presence{flex:1 1 160px;min-width:0}

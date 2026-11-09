@@ -412,6 +412,16 @@ export function activate(host) {
           ),
         );
         let controllers = [];
+        // The board follows the project on its own: new parts and their
+        // status show up without Refresh.
+        const BOARD_REFRESH_MS = 15_000;
+        let lastBoardLoad = 0;
+        const boardRefresh = setInterval(() => {
+          if (!alive || state.busy || loading) return;
+          if (document.visibilityState === "hidden") return;
+          if (Date.now() - lastBoardLoad < BOARD_REFRESH_MS) return;
+          void loadBoard({ quiet: true });
+        }, 5_000);
         let dictation = null;
         let stopDictation = () => {};
         let syncDictation = () => {};
@@ -1067,13 +1077,17 @@ export function activate(host) {
           renderControllerChoices();
           if (state.controller) void refreshController();
         }
-        async function loadBoard() {
+        // `quiet` keeps the board in place while it is read again in the
+        // background: no loading text, no flash of a partial board.
+        async function loadBoard({ quiet = false } = {}) {
           if (loading) return;
           loading = true;
           const generation = ++boardGeneration;
-          role("coverage").textContent = t("loading");
-          action("refresh").disabled = true;
-          renderBoard();
+          if (!quiet) {
+            role("coverage").textContent = t("loading");
+            action("refresh").disabled = true;
+            renderBoard();
+          }
           try {
             const page = await request(
               `/api/conversations/search?limit=${PAGE_SIZE}&sort_order=UPDATED_AT_DESC`,
@@ -1081,9 +1095,11 @@ export function activate(host) {
             if (!Array.isArray(page.items))
               throw new Error(t("discoveryFailed"));
             if (!alive || generation !== boardGeneration) return;
-            board = unique(page.items);
-            discoveryReady = false;
-            renderControls();
+            if (!quiet) {
+              board = unique(page.items);
+              discoveryReady = false;
+              renderControls();
+            }
             // Discovery reads every page: the board is complete after it.
             await discoverControllers(page, generation);
             if (!alive || generation !== boardGeneration) return;
@@ -1095,7 +1111,7 @@ export function activate(host) {
               time: new Date().toLocaleTimeString(),
             });
           } catch (error) {
-            if (alive && generation === boardGeneration) {
+            if (alive && generation === boardGeneration && !quiet) {
               role("coverage").textContent = t("loadError", {
                 message: errorText(error),
               });
@@ -1105,6 +1121,7 @@ export function activate(host) {
           } finally {
             if (alive) {
               loading = false;
+              lastBoardLoad = Date.now();
               action("refresh").disabled = false;
               renderBoard();
               renderControls();
@@ -1892,6 +1909,7 @@ export function activate(host) {
           ++boardGeneration;
           clearTimeout(timer);
           clearTimeout(pullRequestRender);
+          clearInterval(boardRefresh);
           stopDictation(true);
           clearTimeout(pullRequestSweep);
           root.remove();
