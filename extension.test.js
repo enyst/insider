@@ -1121,6 +1121,28 @@ describe("Insider Cat work board", () => {
     );
   });
 
+  it("suggests example prompts before the first message", async () => {
+    const app = mountApp({
+      request: ({ path }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return { items: [controller], next_page_id: null };
+        if (path.includes("/events/search"))
+          return { items: [], next_page_id: null };
+      },
+    });
+    await waitFor(() =>
+      expect(app.container.querySelector(".cat-suggestions")).not.toBeNull(),
+    );
+    const buttons = [...app.container.querySelectorAll(".cat-suggestion")];
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      "What can you help me with?",
+      "Summarize my recent work.",
+    ]);
+    buttons[0].click();
+    expect(find(app, "draft").value).toBe("What can you help me with?");
+    expect(document.activeElement).toBe(find(app, "draft"));
+  });
+
   it("keeps the view-empty message when work exists but no Cat is chosen", async () => {
     const app = mountApp();
     await waitFor(() =>

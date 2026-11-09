@@ -1556,8 +1556,28 @@ export function activate(host) {
               }
               history.append(row);
             }
-            if (!history.childElementCount)
-              history.textContent = t("noMessages");
+            if (!history.childElementCount) {
+              const suggestions = document.createElement("div");
+              suggestions.className = "cat-suggestions";
+              const label = document.createElement("p");
+              label.className = "cat-muted";
+              label.textContent = t("tryPrompt");
+              suggestions.append(label);
+              for (const prompt of [t("promptHelp"), t("promptSummarize")]) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "cat-suggestion";
+                button.textContent = prompt;
+                button.addEventListener("click", () => {
+                  const input = action("draft");
+                  input.value = prompt;
+                  input.dispatchEvent(new Event("input", { bubbles: true }));
+                  input.focus();
+                });
+                suggestions.append(button);
+              }
+              history.append(suggestions);
+            }
             if (focusedRef)
               history
                 .querySelector(`.cat-ref[data-ref="${focusedRef}"]`)

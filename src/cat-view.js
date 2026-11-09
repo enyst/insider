@@ -217,6 +217,8 @@ export const catViewStyles = `
 .insider-app .cat-history-head button{border:0;padding-inline:0;color:var(--cat-accent);font-size:12px}
 .insider-app .cat-history{max-height:340px;overflow:auto;display:grid;gap:16px;overscroll-behavior:contain;scrollbar-width:thin}
 .insider-app .cat-history:empty{display:none}
+.insider-app .cat-suggestions{display:grid;gap:8px;justify-items:start}
+.insider-app .cat-suggestions .cat-suggestion{min-height:40px;font-size:13px;text-align:start;overflow-wrap:anywhere;white-space:normal}
 .insider-app .cat-message{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;padding-inline-end:8px}
 .insider-app .cat-message strong{display:block;font-size:11px;font-weight:600;margin-block-end:5px;color:var(--cat-muted)}
 .insider-app .cat-message[data-speaker=user]{margin-inline-start:28px;border-radius:12px;background:var(--cat-wash);padding:12px}
