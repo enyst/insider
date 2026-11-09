@@ -81,8 +81,9 @@ export const WORKER_ROLE = "worker";
 /** True when this conversation is work tracked by the given Cat. */
 export const belongsToCat = (conversation, controllerId) =>
   Boolean(controllerId) &&
-  (conversation?.tags?.[WORKER_CAT_TAG] === controllerId ||
-    conversation?.parent_conversation_id === controllerId);
+  [conversation?.tags?.[WORKER_CAT_TAG], conversation?.parent_conversation_id]
+    .filter(Boolean)
+    .some((id) => idKey(id) === idKey(controllerId));
 
 /** Tags that attach a conversation to a Cat, keeping its other tags. */
 export function trackedTags(tags, controllerId) {

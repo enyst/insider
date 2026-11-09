@@ -158,12 +158,32 @@ describe("Insider Cat work board", () => {
       ),
     ]);
 
-  it("groups work by what it needs and collapses idle work", async () => {
+  const project = {
+    id: "77777777-7777-4777-8777-777777777777",
+    name: "Release 0.2",
+    description: "Ship the Projects release.",
+    coordinator_conversation_id: controller.id,
+  };
+  const member = (c) => ({
+    ...c,
+    tags: { ...(c.tags || {}), project: project.id.replace(/-/g, "") },
+  });
+  // A backend with Projects where the Cat coordinates `project`.
+  const projectWorld =
+    (items, extra = () => undefined) =>
+    async (args) => {
+      const result = await extra(args);
+      if (result !== undefined) return result;
+      if (args.path.startsWith("/api/conversations/search"))
+        return { items: [controller, ...items], next_page_id: null };
+      if (args.path === "/api/projects") return { projects: [project] };
+      if (args.path === `/api/projects/${project.id}/artifacts`)
+        return { artifacts: [] };
+    };
+
+  it("groups the project's work by what it needs and collapses idle work", async () => {
     const app = mountApp({
-      request: ({ path }) => {
-        if (path.startsWith("/api/conversations/search"))
-          return { items: [idle, running, worker], next_page_id: null };
-      },
+      request: projectWorld([member(idle), member(running), member(worker)]),
     });
     await waitFor(() => expect(groups(app).length).toBe(3));
     expect(groups(app)).toEqual([
@@ -178,16 +198,13 @@ describe("Insider Cat work board", () => {
   });
 
   it("shows what an asking conversation needs on its card", async () => {
-    const asking = {
+    const asking = member({
       ...idle,
       execution_status: "finished",
       tags: { turn: "asked", ask: "Keep the redirects or remove them?" },
-    };
+    });
     const app = mountApp({
-      request: ({ path }) => {
-        if (path.startsWith("/api/conversations/search"))
-          return { items: [asking, running], next_page_id: null };
-      },
+      request: projectWorld([asking, member(running)]),
     });
     await waitFor(() => expect(groups(app).length).toBe(2));
     expect(groups(app)[0]).toEqual(["needsYou", [asking.title]]);
@@ -196,130 +213,130 @@ describe("Insider Cat work board", () => {
     expect(app.container.querySelectorAll(".cat-card-ask").length).toBe(1);
   });
 
-  it("filters to the Cat's work and tracks a conversation with the Cat", async () => {
+  it("shows only the project's conversations, with no search, folders or tracking", async () => {
     const app = mountApp({
-      request: ({ path, method }) => {
-        if (path.startsWith("/api/conversations/search"))
-          return {
-            items: [controller, running, worker],
-            next_page_id: null,
-          };
-        if (method === "PATCH" && path === `/api/conversations/${worker.id}`)
-          return { success: true };
-      },
+      request: projectWorld([member(running), worker]),
     });
-    await waitFor(() => expect(find(app, "scope").hidden).toBe(false));
-    find(app, "scope").value = "cat";
-    find(app, "scope").dispatchEvent(new Event("change"));
-    expect(groups(app)).toEqual([["working", [running.title]]]);
-
-    find(app, "scope").value = "all";
-    find(app, "scope").dispatchEvent(new Event("change"));
-    const needsYou = app.container.querySelector('[data-group="needsYou"]');
-    needsYou.querySelector('[data-action="track-worker"]').click();
     await waitFor(() =>
-      expect(app.request).toHaveBeenCalledWith({
-        path: `/api/conversations/${worker.id}`,
-        method: "PATCH",
-        body: {
-          tags: { insidercat: controller.id, insiderrole: "worker" },
-        },
-      }),
+      expect(groups(app)).toEqual([["working", [running.title]]]),
     );
-    find(app, "scope").value = "cat";
-    find(app, "scope").dispatchEvent(new Event("change"));
+    for (const gone of [
+      "search",
+      "project",
+      "scope",
+      "load-more",
+      "select-worker",
+      "track-worker",
+    ])
+      expect(find(app, gone)).toBeNull();
+    // The card says when the conversation last moved, not which folder it is in.
+    expect(
+      app.container.querySelector(".cat-card-meta").textContent,
+    ).not.toContain("/projects/example");
+  });
+
+  it("keeps the project board when its files can't be read", async () => {
+    const app = mountApp({
+      request: projectWorld([member(running)], ({ path }) => {
+        if (path === `/api/projects/${project.id}/artifacts`)
+          throw Object.assign(new Error("HTTP request failed (500)"), {
+            status: 500,
+          });
+      }),
+    });
     await waitFor(() =>
-      expect(groups(app)).toEqual([
-        ["needsYou", [worker.title]],
-        ["working", [running.title]],
-      ]),
+      expect(groups(app)).toEqual([["working", [running.title]]]),
+    );
+    expect(app.container.querySelector('[data-role="files"]').hidden).toBe(
+      true,
+    );
+    draft(app, "What is left?");
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: `/api/conversations/${controller.id}/events`,
+          method: "POST",
+        }),
+      ),
+    );
+    const sent = app.request.mock.calls.find(
+      ([call]) => call.path === `/api/conversations/${controller.id}/events`,
+    )[0];
+    expect(JSON.stringify(sent.body)).toContain("Release 0.2");
+  });
+
+  it("does not carry a project into a new Cat", async () => {
+    const app = mountApp({ request: projectWorld([member(running)]) });
+    await waitFor(() =>
+      expect(groups(app)).toEqual([["working", [running.title]]]),
+    );
+    click(app, "new-cat");
+    expect(groups(app)).toEqual([]);
+    draft(app, "Start fresh.");
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.request).toHaveBeenCalledWith(
+        expect.objectContaining({ path: "/api/conversations", method: "POST" }),
+      ),
+    );
+    const create = app.request.mock.calls.find(
+      ([call]) => call.path === "/api/conversations" && call.method === "POST",
+    )[0];
+    expect(create.body.initial_message.content[0].text).not.toContain(
+      "Release 0.2",
     );
   });
 
-  it("tracks from the saved tags, keeps focus, and reports a failed update", async () => {
-    let fail = false;
-    const app = mountApp({
-      request: ({ path, method }) => {
-        if (path.startsWith("/api/conversations/search"))
-          return { items: [controller, worker], next_page_id: null };
-        if (path === `/api/conversations/${worker.id}` && method === "GET")
-          return { ...worker, tags: { team: "web" } };
-        if (method === "PATCH") {
-          if (fail) throw new Error("tag update refused");
-          return { success: true };
-        }
-      },
-    });
-    await waitFor(() => expect(find(app, "track-worker")).not.toBeNull());
-    find(app, "track-worker").focus();
-    click(app, "track-worker");
-    await waitFor(() =>
-      expect(app.request).toHaveBeenCalledWith({
-        path: `/api/conversations/${worker.id}`,
-        method: "PATCH",
-        body: {
-          tags: {
-            team: "web",
-            insidercat: controller.id,
-            insiderrole: "worker",
-          },
-        },
-      }),
-    );
-    await waitFor(() =>
-      expect(find(app, "track-worker").textContent).toBe("Stop tracking"),
-    );
-    expect(document.activeElement).toBe(find(app, "track-worker"));
-
-    fail = true;
-    click(app, "track-worker");
-    await waitFor(() =>
-      expect(
-        app.container.querySelector('[data-role="notice"]').textContent,
-      ).toBe("Could not update this conversation: tag update refused"),
-    );
-    expect(find(app, "track-worker").textContent).toBe("Stop tracking");
-  });
-
-  it("re-renders tracking for a newly chosen Cat", async () => {
+  it("shows the Cat's own work on a backend without Projects", async () => {
     const other = {
       ...controller,
       id: "66666666-6666-4666-8666-666666666666",
       title: "Second Cat",
     };
-    const tracked = { ...worker, tags: { insidercat: controller.id } };
     const app = mountApp({
       request: ({ path }) => {
         if (path.startsWith("/api/conversations/search"))
-          return { items: [controller, other, tracked], next_page_id: null };
+          return {
+            items: [controller, other, running, worker],
+            next_page_id: null,
+          };
         if (path === `/api/conversations/${other.id}`) return other;
       },
     });
     await waitFor(() => expect(find(app, "controller").options.length).toBe(3));
     find(app, "controller").value = controller.id;
     find(app, "controller").dispatchEvent(new Event("change"));
-    expect(find(app, "track-worker").textContent).toBe("Stop tracking");
+    await waitFor(() =>
+      expect(groups(app)).toEqual([["working", [running.title]]]),
+    );
     find(app, "controller").value = other.id;
     find(app, "controller").dispatchEvent(new Event("change"));
-    expect(find(app, "track-worker").textContent).toBe("Track with Cat");
+    expect(groups(app)).toEqual([]);
+    expect(app.container.querySelector(".cat-cards").textContent).not.toBe("");
   });
 
-  it("resolves and reopens a conversation from its card", async () => {
-    let saved = { team: "web" };
+  it("resolves from the saved tags, keeps focus, reopens, and reports a failed update", async () => {
+    let saved = { team: "web", project: project.id.replace(/-/g, "") };
+    let fail = false;
     const app = mountApp({
-      request: ({ path, method, body }) => {
+      request: projectWorld([], ({ path, method, body }) => {
         if (path.startsWith("/api/conversations/search"))
           return {
-            items: [{ ...worker, execution_status: "finished", tags: saved }],
+            items: [
+              controller,
+              { ...worker, execution_status: "finished", tags: saved },
+            ],
             next_page_id: null,
           };
         if (path === `/api/conversations/${worker.id}` && method === "GET")
           return { ...worker, execution_status: "finished", tags: saved };
         if (method === "PATCH") {
+          if (fail) throw new Error("tag update refused");
           saved = body.tags;
           return { success: true };
         }
-      },
+      }),
     });
     await waitFor(() =>
       expect(groups(app)).toEqual([["finished", [worker.title]]]),
@@ -329,7 +346,7 @@ describe("Insider Cat work board", () => {
       expect(app.request).toHaveBeenCalledWith({
         path: `/api/conversations/${worker.id}`,
         method: "PATCH",
-        body: { tags: { team: "web", resolved: "user" } },
+        body: { tags: { ...saved, resolved: "user" } },
       }),
     );
     // Resolved starts collapsed; focus follows the card to its group toggle.
@@ -338,8 +355,22 @@ describe("Insider Cat work board", () => {
     find(app, "group-resolved").click();
     expect(document.activeElement).toBe(find(app, "group-resolved"));
     expect(find(app, "resolve-worker").textContent).toBe("Reopen");
+    fail = true;
     click(app, "resolve-worker");
-    await waitFor(() => expect(saved).toEqual({ team: "web" }));
+    await waitFor(() =>
+      expect(
+        app.container.querySelector('[data-role="notice"]').textContent,
+      ).toBe("Could not update this conversation: tag update refused"),
+    );
+    expect(find(app, "resolve-worker").textContent).toBe("Reopen");
+    fail = false;
+    click(app, "resolve-worker");
+    await waitFor(() =>
+      expect(saved).toEqual({
+        team: "web",
+        project: project.id.replace(/-/g, ""),
+      }),
+    );
   });
 
   it.each([
@@ -642,11 +673,14 @@ describe("Insider Cat work board", () => {
     );
   });
 
-  it("hides the Cat filter until a Cat is chosen", async () => {
+  it("shows no work until a Cat is chosen", async () => {
     const app = mountApp();
-    await waitFor(() => expect(groups(app).length).toBe(1));
-    expect(find(app, "scope").hidden).toBe(true);
-    expect(find(app, "track-worker")).toBeNull();
+    await waitFor(() =>
+      expect(app.container.querySelector(".cat-cards").textContent).not.toBe(
+        "",
+      ),
+    );
+    expect(groups(app)).toEqual([]);
   });
 });
 
@@ -676,19 +710,16 @@ describe("Insider Cat App", () => {
       await waitFor(() =>
         expect(find(app, "workspace").options.length).toBeGreaterThan(1),
       );
-      click(app, "select-worker");
+      // The Cat runs in the host workspace without asking; the container
+      // worker's folder is never offered.
       expect(
         [...find(app, "workspace").options].map((item) => item.value),
       ).toEqual(["", "/host/cat"]);
-      expect(find(app, "workspace").value).toBe("");
-      draft(app, "Explain this container's work.");
-      click(app, "send");
+      expect(find(app, "workspace").value).toBe("/host/cat");
       expect(
-        app.request.mock.calls.some(([call]) => call.method === "POST"),
-      ).toBe(false);
-      expect(find(app, "draft").value).toBe("Explain this container's work.");
-      find(app, "workspace").value = "/host/cat";
-      find(app, "workspace").dispatchEvent(new Event("change"));
+        app.container.querySelector('[data-role="workspace-field"]').hidden,
+      ).toBe(true);
+      draft(app, "Explain this container's work.");
       click(app, "send");
       await waitFor(() =>
         expect(app.request).toHaveBeenCalledWith(
@@ -708,10 +739,6 @@ describe("Insider Cat App", () => {
         tags: controller.tags,
       });
       expect(create.body).not.toHaveProperty("parent_conversation_id");
-      expect(create.body.initial_message.content[0].text).toContain(worker.id);
-      expect(create.body.initial_message.content[0].text).toContain(
-        '"workspace":"/workspace"',
-      );
     },
   );
 
@@ -780,9 +807,7 @@ describe("Insider Cat App", () => {
       },
     });
     await waitFor(() => expect(find(app, "workspace").options.length).toBe(2));
-    click(app, "select-worker");
-    find(app, "workspace").value = "/host/cat";
-    find(app, "workspace").dispatchEvent(new Event("change"));
+    expect(find(app, "workspace").value).toBe("/host/cat");
     draft(app, "Keep the worker in context.");
     workspaceAvailable = false;
     click(app, "send");
@@ -796,9 +821,10 @@ describe("Insider Cat App", () => {
     ).toBe(false);
     expect(find(app, "workspace").value).toBe("");
     expect(find(app, "draft").value).toBe("Keep the worker in context.");
-    expect(app.container.querySelector('[data-role="target"] span').title).toBe(
-      worker.id,
-    );
+    // With no host workspace left, the field shows so the person sees why.
+    expect(
+      app.container.querySelector('[data-role="workspace-field"]').hidden,
+    ).toBe(false);
     expect(find(app, "checked").hidden).toBe(true);
   });
 
@@ -895,9 +921,8 @@ describe("Insider Cat App", () => {
     };
     const first = mountApp({ path: "/new", request });
     await waitFor(() =>
-      expect(first.container.textContent).toContain(worker.title),
+      expect(find(first, "workspace").value).toBe(worker.workspace.working_dir),
     );
-    click(first, "select-worker");
     draft(first, "Start this Cat.");
     click(first, "send");
     await waitFor(() =>
@@ -1183,7 +1208,8 @@ describe("Insider Cat App", () => {
     ).toBe(false);
   });
 
-  it("loads explicit pages, keeps drafts when a full-ID worker is selected, and navigates inside Canvas", async () => {
+  it("reads every page into the board and opens a conversation inside Canvas", async () => {
+    const mine = { insidercat: controller.id, insiderrole: "worker" };
     const app = mountApp({
       request: ({ path }) => {
         if (path.includes("page_id=next-page"))
@@ -1193,36 +1219,28 @@ describe("Insider Cat App", () => {
                 id: "ended",
                 title: "Another task",
                 execution_status: "finished",
+                tags: mine,
               },
             ],
             next_page_id: null,
           };
         if (path.startsWith("/api/conversations/search"))
-          return { items: [worker], next_page_id: "next-page" };
+          return {
+            items: [controller, { ...worker, tags: mine }],
+            next_page_id: "next-page",
+          };
       },
     });
     await waitFor(() =>
-      expect(app.container.textContent).toContain(worker.title),
+      expect(app.container.textContent).toContain("Another task"),
     );
+    expect(app.container.textContent).toContain(worker.title);
     expect(app.container.textContent).toContain("Approval requested");
-    draft(app, "Please explain the pending decision.");
-    click(app, "select-worker");
-    expect(find(app, "draft").value).toBe(
-      "Please explain the pending decision.",
-    );
-    expect(app.container.querySelector('[data-role="target"] span').title).toBe(
-      worker.id,
-    );
+    expect(app.container.textContent).toContain("Run ended");
     click(app, "open-worker");
     expect(app.host.navigate).toHaveBeenCalledWith(
       `/conversations/${worker.id}`,
     );
-    click(app, "load-more");
-    await waitFor(() =>
-      expect(app.container.textContent).toContain("Another task"),
-    );
-    expect(app.container.textContent).toContain("Run ended");
-    expect(find(app, "load-more").hidden).toBe(true);
     expect(
       app.request.mock.calls.every(
         ([call]) => !call.method || call.method === "GET",
@@ -1233,9 +1251,8 @@ describe("Insider Cat App", () => {
   it("creates one durable controller with the active profile and confirmation policy, then sends follow-ups to its ID", async () => {
     const app = mountApp();
     await waitFor(() =>
-      expect(app.container.textContent).toContain(worker.title),
+      expect(find(app, "workspace").value).toBe(worker.workspace.working_dir),
     );
-    click(app, "select-worker");
     draft(app, "Explain this work.");
     click(app, "send");
     await waitFor(() =>
@@ -1270,7 +1287,6 @@ describe("Insider Cat App", () => {
     expect(
       create.body.agent_launch_additions.system_message_suffix_append,
     ).not.toContain("<RUNTIME_SERVICES>");
-    expect(create.body.initial_message.content[0].text).toContain(worker.id);
     await waitFor(() => expect(find(app, "send").disabled).toBe(false));
     draft(app, "Continue the explanation.");
     click(app, "send");
@@ -1310,9 +1326,8 @@ describe("Insider Cat App", () => {
       },
     });
     await waitFor(() =>
-      expect(app.container.textContent).toContain(worker.title),
+      expect(find(app, "workspace").value).toBe(worker.workspace.working_dir),
     );
-    click(app, "select-worker");
     draft(app, "Count the conversations here.");
     click(app, "send");
     await waitFor(() =>
@@ -1380,9 +1395,7 @@ describe("Insider Cat App", () => {
       restored.request.mock.calls.some(([call]) => call.method === "POST"),
     ).toBe(false);
     const other = mountApp({ backendId: "backend-two" });
-    await waitFor(() =>
-      expect(other.container.textContent).toContain(worker.title),
-    );
+    await waitFor(() => expect(find(other, "send").disabled).toBe(false));
     expect(
       other.request.mock.calls.some(([call]) =>
         call.path.includes("/events/search"),
@@ -1398,9 +1411,8 @@ describe("Insider Cat App", () => {
       },
     });
     await waitFor(() =>
-      expect(app.container.textContent).toContain(worker.title),
+      expect(find(app, "workspace").value).toBe(worker.workspace.working_dir),
     );
-    click(app, "select-worker");
     draft(app, "Do this once.");
     click(app, "send");
     await waitFor(() =>
@@ -1427,17 +1439,14 @@ describe("Insider Cat App", () => {
       },
     });
     await waitFor(() =>
-      expect(app.container.textContent).toContain(worker.title),
+      expect(find(app, "workspace").value).toBe(worker.workspace.working_dir),
     );
-    click(app, "select-worker");
     draft(app, "Start once.");
     click(app, "send");
     await waitFor(() => expect(resolveCreate).toBeTypeOf("function"));
     draft(app, "My next request, still a draft.");
     app.remount();
-    await waitFor(() =>
-      expect(app.container.textContent).toContain(worker.title),
-    );
+    await waitFor(() => expect(find(app, "refresh").disabled).toBe(false));
     expect(find(app, "send").disabled).toBe(true);
     expect(find(app, "new-cat").disabled).toBe(true);
     resolveCreate();
@@ -1503,9 +1512,8 @@ describe("Insider Cat App", () => {
         },
       });
       await waitFor(() =>
-        expect(app.container.textContent).toContain(worker.title),
+        expect(find(app, "workspace").value).toBe(worker.workspace.working_dir),
       );
-      click(app, "select-worker");
       draft(app, "Keep this request.");
       click(app, "send");
       await waitFor(() =>
@@ -1529,9 +1537,8 @@ describe("Insider Cat App", () => {
       },
     });
     await waitFor(() =>
-      expect(app.container.textContent).toContain(worker.title),
+      expect(find(app, "workspace").value).toBe(worker.workspace.working_dir),
     );
-    click(app, "select-worker");
     draft(app, "Wait for settings.");
     click(app, "send");
     await waitFor(() => expect(resolveSettings).toBeTypeOf("function"));
@@ -1565,35 +1572,37 @@ describe("Insider Cat project files", () => {
       updated_at: "2026-11-09T11:00:00Z",
     },
   ];
-  const projectRequests = (extra = () => undefined) => async (call) => {
-    const result = await extra(call);
-    if (result !== undefined) return result;
-    const { path } = call;
-    if (path.startsWith("/api/conversations/search"))
-      return { items: [controller, worker], next_page_id: null };
-    if (path === "/api/projects")
-      return {
-        projects: [
-          {
-            id: projectId,
-            name: "Insider 0.2",
-            coordinator_conversation_id: controller.id.replace(/-/g, ""),
-          },
-        ],
-      };
-    if (path === `/api/projects/${projectId}/artifacts`)
-      return { artifacts: files };
-    if (path === `/api/projects/${projectId}/artifacts/CHANGELOG.md`)
-      return "# 0.2.0-beta.1\n";
-    return undefined;
-  };
+  const projectRequests =
+    (extra = () => undefined) =>
+    async (call) => {
+      const result = await extra(call);
+      if (result !== undefined) return result;
+      const { path } = call;
+      if (path.startsWith("/api/conversations/search"))
+        return { items: [controller, worker], next_page_id: null };
+      if (path === "/api/projects")
+        return {
+          projects: [
+            {
+              id: projectId,
+              name: "Insider 0.2",
+              coordinator_conversation_id: controller.id.replace(/-/g, ""),
+            },
+          ],
+        };
+      if (path === `/api/projects/${projectId}/artifacts`)
+        return { artifacts: files };
+      if (path === `/api/projects/${projectId}/artifacts/CHANGELOG.md`)
+        return "# 0.2.0-beta.1\n";
+      return undefined;
+    };
 
   it("lists the files of the project the Cat leads, newest first, by source", async () => {
     const app = mountApp({ request: projectRequests() });
     await waitFor(() =>
-      expect(
-        app.container.querySelector('[data-role="files"]').hidden,
-      ).toBe(false),
+      expect(app.container.querySelector('[data-role="files"]').hidden).toBe(
+        false,
+      ),
     );
     const rows = [...app.container.querySelectorAll(".cat-file")];
     expect(rows.map((row) => row.dataset.file)).toEqual([
@@ -1602,7 +1611,9 @@ describe("Insider Cat project files", () => {
     ]);
     expect(rows[0].dataset.source).toBe("user");
     expect(rows[0].textContent).toContain("Added by you");
-    expect(rows[1].textContent).toContain("Made by an agent · Review the project");
+    expect(rows[1].textContent).toContain(
+      "Made by an agent · Review the project",
+    );
     expect(
       app.container.querySelector('[data-role="files-title"]').textContent,
     ).toBe("Project files · 2");
@@ -1633,7 +1644,10 @@ describe("Insider Cat project files", () => {
     let uploaded = null;
     const app = mountApp({
       request: projectRequests(({ path, method, body }) => {
-        if (method === "POST" && path === `/api/projects/${projectId}/artifacts`) {
+        if (
+          method === "POST" &&
+          path === `/api/projects/${projectId}/artifacts`
+        ) {
           uploaded = body;
           return { name: "notes.txt", source: "user" };
         }
@@ -1645,7 +1659,10 @@ describe("Insider Cat project files", () => {
     );
     const input = find(app, "file-input");
     const file = new File(["hello"], "notes.txt", { type: "text/plain" });
-    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    Object.defineProperty(input, "files", {
+      value: [file],
+      configurable: true,
+    });
     input.dispatchEvent(new Event("change"));
     await waitFor(() => expect(uploaded).toBeInstanceOf(FormData));
     expect(uploaded.get("file").name).toBe("notes.txt");
@@ -1665,6 +1682,8 @@ describe("Insider Cat project files", () => {
         expect.objectContaining({ path: "/api/projects" }),
       ),
     );
-    expect(app.container.querySelector('[data-role="files"]').hidden).toBe(true);
+    expect(app.container.querySelector('[data-role="files"]').hidden).toBe(
+      true,
+    );
   });
 });

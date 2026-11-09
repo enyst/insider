@@ -56,6 +56,13 @@ describe("Cat tracking tags", () => {
     expect(belongsToCat({ tags: { insidercat: cat } }, null)).toBe(false);
   });
 
+  it("matches a Cat whichever way its id is written", () => {
+    const hex = cat.replace(/-/g, "");
+    expect(belongsToCat({ tags: { insidercat: cat } }, hex)).toBe(true);
+    expect(belongsToCat({ parent_conversation_id: hex }, cat)).toBe(true);
+    expect(belongsToCat({ tags: { insidercat: "other" } }, cat)).toBe(false);
+  });
+
   it("adds and removes tracking without losing other tags", () => {
     const tracked = trackedTags({ team: "web" }, cat);
     expect(tracked).toEqual({
