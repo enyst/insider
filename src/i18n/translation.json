@@ -2228,5 +2228,22 @@
     "ja": "設定 › 試験運用でオンにする",
     "uk": "Увімкніть у Налаштування › Експериментальні",
     "ca": "Activa'ls a Configuració › Experimental"
+  },
+  "INSIDER_CAT$PROJECT_CREATE_ERROR": {
+    "en": "The Cat started, but its project could not be created: {{message}}",
+    "zh-CN": "猫已启动，但无法创建它的项目：{{message}}",
+    "de": "Die Katze wurde gestartet, aber ihr Projekt konnte nicht erstellt werden: {{message}}",
+    "ko-KR": "고양이는 시작되었지만 프로젝트를 만들 수 없습니다: {{message}}",
+    "no": "Katten startet, men prosjektet dens kunne ikke opprettes: {{message}}",
+    "zh-TW": "貓已啟動，但無法建立它的專案：{{message}}",
+    "it": "Il Gatto è partito, ma non è stato possibile creare il suo progetto: {{message}}",
+    "pt": "O Gato começou, mas não foi possível criar o projeto dele: {{message}}",
+    "es": "El Gato empezó, pero no se pudo crear su proyecto: {{message}}",
+    "ar": "بدأت القطة، لكن تعذر إنشاء مشروعها: {{message}}",
+    "fr": "Le Chat a démarré, mais son projet n'a pas pu être créé : {{message}}",
+    "tr": "Kedi başladı, ancak projesi oluşturulamadı: {{message}}",
+    "ja": "Cat は起動しましたが、プロジェクトを作成できませんでした: {{message}}",
+    "uk": "Кіт запустився, але його проєкт не вдалося створити: {{message}}",
+    "ca": "El Gat ha començat, però no s'ha pogut crear el seu projecte: {{message}}"
   }
 }
