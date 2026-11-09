@@ -13,6 +13,7 @@ import {
   belongsToCat,
   conversationRefs,
   mentionParts,
+  inlineMarkdownParts,
   foldReactions,
   groupByAttention,
   groupFor,
@@ -1048,19 +1049,34 @@ export function activate(host) {
         }
         // Mentions read as links that open the conversation, named by its
         // current title when the server reported it.
-        function mentionNodes(text, refs) {
-          return mentionParts(text).map((part) => {
+        function textNodes(text) {
+          return inlineMarkdownParts(text).map((part) => {
             if (typeof part === "string") return document.createTextNode(part);
-            const link = document.createElement("button");
-            link.type = "button";
+            const node = document.createElement(
+              part.bold !== undefined ? "b" : "code",
+            );
+            node.textContent = part.bold ?? part.code;
+            return node;
+          });
+        }
+        function mentionNodes(text, refs) {
+          return mentionParts(text).flatMap((part) => {
+            if (typeof part === "string") return textNodes(part);
+            // A real inline link, so a long title wraps with the sentence
+            // instead of jumping to a line of its own.
+            const id = refs.get(idKey(part.id))?.id || part.id;
+            const link = document.createElement("a");
             link.className = "cat-mention";
+            link.href = `/conversations/${encodeURIComponent(id)}`;
             link.dataset.ref = idKey(part.id);
             link.title = part.id;
             link.textContent = refs.get(idKey(part.id))?.title || part.title;
-            link.addEventListener("click", () =>
-              open(refs.get(idKey(part.id))?.id || part.id),
-            );
-            return link;
+            link.addEventListener("click", (event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+              event.preventDefault();
+              open(id);
+            });
+            return [link];
           });
         }
         function refCard(c) {

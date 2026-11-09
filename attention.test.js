@@ -8,6 +8,7 @@ import {
   relativeAge,
   resolvedTags,
   groupByAttention,
+  inlineMarkdownParts,
   pullRequestStatusKeys,
   trackedTags,
   untrackedTags,
@@ -230,5 +231,19 @@ describe("pullRequestStatusKeys", () => {
     expect(pullRequestStatusKeys({ state: "closed", checks: "none" })).toEqual([
       "prClosed",
     ]);
+  });
+});
+
+describe("inlineMarkdownParts", () => {
+  it("marks bold and code, and leaves the rest as text", () => {
+    expect(inlineMarkdownParts("1. **Keyboard** — on `main`, 2 * 3")).toEqual([
+      "1. ",
+      { bold: "Keyboard" },
+      " — on ",
+      { code: "main" },
+      ", 2 * 3",
+    ]);
+    expect(inlineMarkdownParts("plain")).toEqual(["plain"]);
+    expect(inlineMarkdownParts("")).toEqual([""]);
   });
 });

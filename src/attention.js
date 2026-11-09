@@ -244,3 +244,25 @@ export function pullRequestStatusKeys(status) {
   }[status.checks];
   return checks && status.state === "open" ? [state, checks] : [state];
 }
+
+// The inline Markdown the Cat writes most: **bold** and `code`.
+const INLINE_MARKDOWN = /\*\*([^*\n]+?)\*\*|`([^`\n]+)`/g;
+
+/**
+ * Plain text split around **bold** and `code` spans: strings stay plain, and
+ * `{ bold }` or `{ code }` mark each span, in order.
+ */
+export function inlineMarkdownParts(text) {
+  const source = String(text || "");
+  const parts = [];
+  let last = 0;
+  for (const match of source.matchAll(INLINE_MARKDOWN)) {
+    if (match.index > last) parts.push(source.slice(last, match.index));
+    parts.push(
+      match[1] !== undefined ? { bold: match[1] } : { code: match[2] },
+    );
+    last = match.index + match[0].length;
+  }
+  if (last < source.length || !parts.length) parts.push(source.slice(last));
+  return parts;
+}

@@ -813,7 +813,7 @@ describe("Insider Cat work board", () => {
                   content: [
                     {
                       type: "text",
-                      text: `[Old title](conversation:${hex}) needs your answer.`,
+                      text: `[Old title](conversation:${hex}) needs your **answer** on \`main\`.`,
                     },
                   ],
                 },
@@ -832,8 +832,18 @@ describe("Insider Cat work board", () => {
     const row = app.container
       .querySelector(".cat-mention")
       .closest(".cat-message");
-    expect(row.textContent).toContain("Ship the board needs your answer.");
+    expect(row.textContent).toContain(
+      "Ship the board needs your answer on main.",
+    );
     expect(row.textContent).not.toContain("conversation:");
+    expect(row.textContent).not.toContain("**");
+    expect(row.querySelector("b").textContent).toBe("answer");
+    expect(row.querySelector("code").textContent).toBe("main");
+    const mention = app.container.querySelector(".cat-mention");
+    expect(mention.tagName).toBe("A");
+    expect(mention.getAttribute("href")).toBe(
+      `/conversations/${encodeURIComponent(worker.id)}`,
+    );
     app.container.querySelector(".cat-mention").click();
     expect(app.host.navigate).toHaveBeenCalledWith(
       `/conversations/${encodeURIComponent(worker.id)}`,
