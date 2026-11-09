@@ -35,4 +35,11 @@ describe("Insider styles follow the Canvas colour theme", () => {
     for (const [name, value] of Object.entries(defs))
       expect(value).not.toContain(`var(${name})`);
   });
+
+  it("clamps a long ask so it cannot stretch the card", () => {
+    const ask = rules.find((rule) => rule.includes(".cat-card-ask{"));
+    expect(ask).toMatch(/display:\s*-webkit-box/);
+    expect(ask).toMatch(/-webkit-line-clamp:\s*2/);
+    expect(ask).toMatch(/overflow:\s*hidden/);
+  });
 });
