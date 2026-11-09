@@ -186,3 +186,17 @@ export function foldReactions(events) {
   }
   return byTarget;
 }
+
+const PR_URL = /https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/g;
+
+/** The pull request a conversation mentioned last, from its saved messages. */
+export function latestPullRequest(texts) {
+  let found = null;
+  for (const text of texts)
+    for (const match of String(text || "").matchAll(PR_URL))
+      found = {
+        url: match[0],
+        label: `${match[1]}/${match[2]}#${match[3]}`,
+      };
+  return found;
+}

@@ -16,6 +16,7 @@ import {
   groupByAttention,
   groupFor,
   idKey,
+  latestPullRequest,
   isResolved,
   relativeAge,
   resolvedTags,
@@ -596,9 +597,12 @@ export function activate(host) {
                     : belongsToCat(c, controllerId)),
               )
             : [];
+          const grouped = groupByAttention(cards);
+          renderProjectHead(grouped);
+          readPullRequests(cards);
           const parent = role("cards");
           parent.replaceChildren();
-          for (const group of groupByAttention(cards)) {
+          for (const group of grouped) {
             const section = document.createElement("section");
             section.className = "cat-group";
             section.dataset.group = group.id;
@@ -626,6 +630,80 @@ export function activate(host) {
             empty.className = "cat-muted";
             empty.textContent = t(controllerId ? "emptyCat" : "empty");
             parent.append(empty);
+          }
+        }
+        // The project's name, goal and how its work stands, above the cards.
+        function renderProjectHead(grouped) {
+          role("work-title").textContent = boardProject?.name || t("workTitle");
+          const goal = role("project-goal");
+          goal.textContent = boardProject?.description || "";
+          goal.hidden = !goal.textContent;
+          const progress = role("project-progress");
+          progress.textContent = grouped
+            .map((g) => `${t(groupCopy[g.id])} ${g.items.length}`)
+            .join(" · ");
+          progress.hidden = !boardProject || !grouped.length;
+        }
+        // Pull requests the project's conversations mention, read once per
+        // conversation and change, from the light project transcript.
+        const pullRequests = new Map();
+        const pullRequestReads = new Map();
+        let pullRequestRender = null;
+        function clearPullRequests() {
+          pullRequests.clear();
+          pullRequestReads.clear();
+        }
+        // Results arrive one by one: draw them together, keeping focus.
+        function schedulePullRequestRender() {
+          if (pullRequestRender) return;
+          pullRequestRender = setTimeout(() => {
+            pullRequestRender = null;
+            if (!alive) return;
+            const focused = document.activeElement;
+            const cardId = focused?.closest?.("[data-card]")?.dataset.card;
+            const focusAction = focused?.dataset?.action;
+            renderBoard();
+            if (cardId && focusAction)
+              restoreFocus(
+                `[data-card="${cardId}"] [data-action="${focusAction}"]`,
+              );
+          }, 50);
+        }
+        function readPullRequests(cards) {
+          const project = boardProject;
+          if (!project) return;
+          for (const c of cards) {
+            const key = idKey(c.id);
+            const version = `${project.id}:${c.updated_at || ""}`;
+            if (pullRequestReads.get(key) === version) continue;
+            pullRequestReads.set(key, version);
+            const stillWanted = () =>
+              alive &&
+              boardProject?.id === project.id &&
+              pullRequestReads.get(key) === version;
+            request(
+              `/api/projects/${encodeURIComponent(project.id)}/conversations/${encodeURIComponent(c.id)}/messages?limit=50`,
+            )
+              .then((transcript) => {
+                if (!stillWanted()) return;
+                // The agent's own words, newest last; the person's and tool
+                // output can name unrelated pull requests.
+                const pr = latestPullRequest(
+                  (transcript?.messages || [])
+                    .filter((m) => m.source === "agent")
+                    .map((m) => m.text),
+                );
+                const before = pullRequests.get(key)?.url;
+                if (pr) pullRequests.set(key, pr);
+                else pullRequests.delete(key);
+                if (before !== pr?.url) schedulePullRequestRender();
+              })
+              .catch(() => {
+                // Read again on the next render; older servers have no
+                // transcript, and their cards simply show no PR line.
+                if (pullRequestReads.get(key) === version)
+                  pullRequestReads.delete(key);
+              });
           }
         }
         function card(c) {
@@ -679,7 +757,22 @@ export function activate(host) {
               ),
           );
           buttons.append(resolve);
-          card.append(title, meta, ...(ask ? [askLine] : []), buttons);
+          const pr = boardProject && pullRequests.get(idKey(c.id));
+          const prLine = document.createElement("a");
+          if (pr) {
+            prLine.className = "cat-card-pr";
+            prLine.href = pr.url;
+            prLine.target = "_blank";
+            prLine.rel = "noopener noreferrer";
+            prLine.textContent = `PR ${pr.label}`;
+          }
+          card.append(
+            title,
+            meta,
+            ...(ask ? [askLine] : []),
+            ...(pr ? [prLine] : []),
+            buttons,
+          );
           return card;
         }
         async function discoverControllers(firstPage, generation) {
@@ -855,11 +948,17 @@ export function activate(host) {
         const artifactPath = (projectId, name) =>
           `/api/projects/${encodeURIComponent(projectId)}/artifacts${name === undefined ? "" : `/${encodeURIComponent(name)}`}`;
         function setBoardProject(project) {
+          if ((boardProject?.id || null) !== (project?.id || null))
+            clearPullRequests();
           // Voice requests read the project from the shared state.
           state.project = project
             ? { id: project.id, name: project.name }
             : null;
-          if ((boardProject?.id || null) === (project?.id || null)) {
+          if (
+            (boardProject?.id || null) === (project?.id || null) &&
+            boardProject?.name === project?.name &&
+            boardProject?.description === project?.description
+          ) {
             boardProject = project;
             return;
           }
@@ -1478,6 +1577,7 @@ export function activate(host) {
           ++readGeneration;
           ++boardGeneration;
           clearTimeout(timer);
+          clearTimeout(pullRequestRender);
           root.remove();
           if (disposeCurrent === dispose) disposeCurrent = null;
           if (syncCurrent === synchronize) syncCurrent = null;

@@ -120,7 +120,9 @@ on the user's exact words, say so and quote them apart from your own
 instructions. In a new worker's first message, also ask it to answer in its own
 conversation rather than message yours, to make every choice it can on its own,
 and to stop rather than guess only on decisions the user must make, ending its
-final answer with those decisions as short, clear questions. The user sees them
+final answer with those decisions as short, clear questions. Also ask it to
+give the full URL of any pull request it opens in its reply: the project board
+links a card to the last pull request its conversation names. The user sees them
 the next time you or they check that conversation.
 
 Track the work you start. When you create a worker, add the tags

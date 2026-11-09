@@ -197,6 +197,52 @@ describe("Insider Cat work board", () => {
     expect(groups(app)[2]).toEqual(["idle", [idle.title]]);
   });
 
+  it("heads the board with the project's name, goal and progress, and links each part's PR", async () => {
+    const app = mountApp({
+      request: projectWorld([member(running), member(worker)], ({ path }) => {
+        if (path.includes(`/conversations/${running.id}/messages`))
+          return {
+            messages: [
+              {
+                source: "agent",
+                text: "Opened https://github.com/enyst/insider/pull/3 first.",
+              },
+              {
+                source: "user",
+                text: "See https://github.com/enyst/insider/pull/99",
+              },
+              {
+                source: "agent",
+                text: "Replaced it with https://github.com/enyst/insider/pull/7.",
+              },
+            ],
+          };
+        if (path.includes("/messages")) return { messages: [] };
+      }),
+    });
+    await waitFor(() =>
+      expect(
+        app.container.querySelector('[data-role="work-title"]').textContent,
+      ).toBe("Release 0.2"),
+    );
+    expect(
+      app.container.querySelector('[data-role="project-goal"]').textContent,
+    ).toBe("Ship the Projects release.");
+    expect(
+      app.container.querySelector('[data-role="project-progress"]').textContent,
+    ).toBe("Needs you 1 · Working 1");
+    await waitFor(() =>
+      expect(app.container.querySelector(".cat-card-pr")).not.toBeNull(),
+    );
+    const pr = app.container.querySelector(".cat-card-pr");
+    expect(pr.textContent).toBe("PR enyst/insider#7");
+    expect(pr.getAttribute("href")).toBe(
+      "https://github.com/enyst/insider/pull/7",
+    );
+    expect(pr.closest("[data-card]").dataset.card).toBe(running.id);
+    expect(app.container.querySelectorAll(".cat-card-pr").length).toBe(1);
+  });
+
   it("shows what an asking conversation needs on its card", async () => {
     const asking = member({
       ...idle,
