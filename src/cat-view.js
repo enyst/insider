@@ -205,14 +205,12 @@ export const catViewStyles = `
 .insider-app .cat-composer .cat-controls{justify-content:flex-end}
 .insider-app .cat-work-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .insider-app .cat-work-head button{font-size:12px;border:0;color:var(--cat-muted)}
-.insider-app .cat-filters{display:grid;gap:8px}
 .insider-app .cat-cards{display:grid;gap:4px}
 .insider-app .cat-group{display:grid}
 .insider-app .cat-group-head{justify-self:start;border:0;background:none;padding:12px 0 6px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--cat-muted);cursor:pointer}
 .insider-app .cat-group-head::before{content:"▾";display:inline-block;margin-inline-end:6px;transition:transform .15s}
 .insider-app .cat-group-head[aria-expanded=false]::before{transform:rotate(-90deg)}
 .insider-app .cat-card{padding:16px 0;border-block-start:1px solid var(--cat-line);display:grid;gap:9px;min-width:0}
-.insider-app .cat-card.is-selected{border-inline-start:2px solid var(--cat-accent);padding-inline-start:12px}
 .insider-app .cat-card-title{font-weight:550;overflow-wrap:anywhere}
 .insider-app .cat-card-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--cat-muted)}
 .insider-app .cat-card-ask{font-size:13px;overflow-wrap:anywhere;border-left:2px solid var(--cat-warn);padding-left:8px}
@@ -228,9 +226,6 @@ export const catViewStyles = `
 .insider-app .cat-ref[data-status=waiting_for_confirmation] .cat-badge{color:var(--cat-warn)}
 .insider-app .cat-ref:is([data-status=error],[data-status=stuck]) .cat-badge{color:var(--cat-error)}
 .insider-app .cat-ref[data-status=running] .cat-badge{color:var(--cat-accent)}
-.insider-app .cat-target{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--cat-tint);border-radius:10px;border-inline-start:2px solid var(--cat-accent);font-size:12px;min-width:0}
-.insider-app .cat-target>span{min-width:0;overflow-wrap:anywhere;flex:1}
-.insider-app .cat-target button{font-size:12px;flex-shrink:0}
 .insider-app .cat-files{display:grid;gap:8px;border-block-start:1px solid var(--cat-line);padding-block-start:16px}
 .insider-app .cat-files h3{font-size:12px;font-weight:600;letter-spacing:.02em}
 .insider-app .cat-file-list{list-style:none;margin:0;padding:0;display:grid;gap:2px}
@@ -265,19 +260,17 @@ export const catPageMarkup = `<style>${catViewStyles}</style>
       <div data-role="voice"></div>
       <div class="cat-picker"><label><span data-copy="controller" class="cat-sr-only"></span><select data-action="controller"></select></label><button data-action="new-cat" data-copy="newCat"></button></div>
       <p data-role="cat-status" class="cat-muted" role="status"></p>
-      <label data-role="workspace-field"><span data-copy="workspace"></span><select data-action="workspace"></select></label>
+      <label data-role="workspace-field" hidden><span data-copy="workspace"></span><select data-action="workspace"></select></label>
       <div class="cat-conversation" data-role="conversation">
         <div class="cat-history-head"><h3 data-copy="recent"></h3><button data-action="open-controller" data-copy="full" hidden></button></div>
         <div data-role="history" class="cat-history"></div>
       </div>
-      <div data-role="target" class="cat-target" hidden></div>
       <div class="cat-composer"><label><span data-copy="draft" class="cat-sr-only"></span><textarea data-action="draft"></textarea></label><div class="cat-controls"><button data-action="send" data-copy="send" class="cat-primary"></button></div></div>
       <p data-role="notice" class="cat-notice" role="status" aria-live="polite"></p><button data-action="checked" data-copy="checked" hidden></button>
     </section>
     <section class="cat-stack cat-work">
       <div class="cat-work-head"><h2 data-copy="workTitle"></h2><button data-action="refresh" data-copy="refresh"></button></div>
-      <div class="cat-filters"><input data-action="search" type="search"><select data-action="project"></select><select data-action="scope" hidden></select></div>
-      <p data-role="coverage" class="cat-muted" role="status"></p><div data-role="cards" class="cat-cards"></div><button data-action="load-more" data-copy="loadMore" hidden></button>
+      <p data-role="coverage" class="cat-muted" role="status"></p><div data-role="cards" class="cat-cards"></div>
       <section class="cat-files" data-role="files" hidden>
         <div class="cat-work-head"><h3 data-role="files-title"></h3><button data-action="add-file" data-copy="addFile"></button></div>
         <input data-action="file-input" type="file" hidden>

@@ -1,6 +1,6 @@
 ---
 name: insider-cat
-description: Coordinate projects and conversations as Insider Cat when the Agent Canvas runtime identifies this conversation as its active Insider controller. Keep the controller, selected worker, backend, and voice session distinct. Do not adopt this role merely while implementing, reviewing, or documenting Insider Cat.
+description: Coordinate projects and conversations as Insider Cat when the Agent Canvas runtime identifies this conversation as its active Insider controller. Keep the controller, its project, each worker, the backend, and the voice session distinct. Do not adopt this role merely while implementing, reviewing, or documenting Insider Cat.
 ---
 
 # Insider Cat
@@ -19,7 +19,7 @@ does not establish that state. This skill supplies guidance, not tools or access
 Use the runtime context and available state tools to establish:
 
 - your controller conversation and its backend;
-- the selected project/workspace and selected worker conversation, if any;
+- the project you coordinate, if any (the request context names it);
 - the target conversation's backend and current status;
 - the tools actually attached to this conversation;
 - whether voice is connected, muted, or ended, when the host exposes that state.
@@ -39,7 +39,7 @@ credential values out of commands, output, and messages: read the configured
 key file or environment variable inside the request script.
 
 For a backend-wide count, prefer its authoritative count endpoint; paginate
-when listing conversations. Loaded cards, selected work, and remembered
+when listing conversations. Loaded cards, project work, and remembered
 conversations are not a current total. Inspect persistence only when its path
 is confirmed to belong to this backend and is accessible in your workspace;
 count distinct conversation records, not event files or lines of messages.
@@ -48,7 +48,7 @@ Do not substitute another backend or guessed default port if context is absent.
 Keep backend identity together with conversation identity. A title is a label,
 not an address. Navigation changes what the user sees; it does not move your
 history, change a worker's workspace, or grant access to another backend. After
-a selection or backend change, resolve the target again before a mutation.
+a project or backend change, resolve the target again before a mutation.
 
 ## Delegate, then route
 
@@ -67,7 +67,7 @@ redo that conversation's work in your own.
 
 ## Coordinate work without losing the conversation
 
-Keep the user's discussion with you in the controller conversation. A selected
+Keep the user's discussion with you in the controller conversation. A
 worker is a separate conversation with its own history, settings, and workspace.
 Read its available status and relevant recent events before describing its work.
 Load older context only as needed; a summary or latest page is not full history.
@@ -132,8 +132,9 @@ existing conversation, read its current tags immediately before updating them
 and send them all back with yours, because a tag update replaces the whole set.
 Keep an existing `insiderrole`, never tag another Cat controller
 (`smolpaws: insider`), and ask before replacing an `insidercat` that names a
-different Cat. The Projects page uses these tags for its "This Cat's work"
-view. Tracking is bookkeeping only: it does not message, start, or approve
+different Cat. On a backend without Projects, the Projects page shows the
+work these tags and your child conversations mark as yours; with Projects, it
+shows your project's conversations. Tracking is bookkeeping only: it does not message, start, or approve
 anything in that conversation.
 
 When asked what needs attention, group tracked work the way the page does:

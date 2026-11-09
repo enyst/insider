@@ -19,8 +19,6 @@ import {
   isResolved,
   relativeAge,
   resolvedTags,
-  trackedTags,
-  untrackedTags,
 } from "./attention.js";
 import {
   CONTROLLER_TAGS,
@@ -175,7 +173,6 @@ export function activate(host) {
     // A malformed or unavailable cache must not prevent browsing saved work.
   }
   const state = {
-    selected: null,
     draft: "",
     controller: null,
     workspace: "",
@@ -251,23 +248,9 @@ export function activate(host) {
       !state.uncertain &&
       !state.controllerInvalid &&
       state.controller?.id === id,
-    getContext: async () => {
-      const selectedId = state.selected?.id;
-      const selected = selectedId
-        ? await host.agentServer.request({ path: detailPath(selectedId) })
-        : null;
-      return {
-        voice: { connected: true, muted: voice.getSnapshot().muted },
-        selected_conversation: selected
-          ? {
-              id: selected.id,
-              title: selected.title,
-              workspace: workspaceOf(selected),
-              status: selected.execution_status,
-            }
-          : null,
-      };
-    },
+    getContext: async () => ({
+      voice: { connected: true, muted: voice.getSnapshot().muted },
+    }),
     onChange: () => {
       syncCompanion?.();
       syncCurrent?.();
@@ -389,9 +372,9 @@ export function activate(host) {
         let boardGeneration = 0;
         let timer = null;
         let board = [];
-        let cursor = null;
         const missingRefs = new Set();
-        let boardScope = "all";
+        // The project this Cat coordinates, when the Agent Server has Projects.
+        let boardProject = null;
         const collapsedGroups = new Set(COLLAPSED_GROUPS);
         const tracking = new Set();
         const groupCopy = Object.fromEntries(
@@ -416,9 +399,6 @@ export function activate(host) {
         });
         const action = (name) => root.querySelector(`[data-action="${name}"]`);
         const role = (name) => root.querySelector(`[data-role="${name}"]`);
-        action("search").placeholder = t("search");
-        action("search").ariaLabel = t("search");
-        action("project").ariaLabel = t("project");
         action("draft").placeholder = t("placeholder");
         action("draft").value = state.draft;
         const pageVoice = mountCatVoice({
@@ -500,7 +480,9 @@ export function activate(host) {
             state.busy || state.uncertain || !discoveryReady;
           action("controller").disabled = state.busy || state.uncertain;
           action("open-controller").hidden = !state.controller;
-          role("workspace-field").hidden = Boolean(state.controller);
+          // A new Cat runs in the first host workspace; ask only when none is known.
+          role("workspace-field").hidden =
+            Boolean(state.controller) || Boolean(state.workspace);
           role("conversation").hidden = !state.controller;
           role("cat-status").hidden = discoveryReady;
           role("cat-status").textContent = discoveryReady ? "" : t("searching");
@@ -539,11 +521,14 @@ export function activate(host) {
           ];
           if (workspaceDiscoveryReady && !paths.includes(state.workspace))
             state.workspace = "";
+          if (!state.workspace && paths.length) state.workspace = paths[0];
           action("workspace").replaceChildren(
             option("", t("chooseWorkspace")),
             ...paths.map((path) => workspaceOption(path, paths)),
           );
           action("workspace").value = state.workspace;
+          role("workspace-field").hidden =
+            Boolean(state.controller) || Boolean(state.workspace);
         }
         async function refreshWorkspaces() {
           const generation = ++workspaceGeneration;
@@ -556,43 +541,6 @@ export function activate(host) {
           workspaces = data?.workspaces || [];
           workspaceDiscoveryReady = true;
           renderWorkspaces();
-        }
-        function renderTarget() {
-          const node = role("target");
-          node.replaceChildren();
-          node.hidden = !state.selected;
-          if (!state.selected) return;
-          const title = document.createElement("span");
-          title.textContent = `${t("selected")}: ${state.selected.title || state.selected.id}`;
-          title.title = state.selected.id;
-          const clear = document.createElement("button");
-          clear.textContent = t("clear");
-          clear.addEventListener("click", () => {
-            state.selected = null;
-            renderTarget();
-            renderBoard();
-          });
-          node.append(title, clear);
-        }
-        function renderScope() {
-          const controllerId = state.controller?.id;
-          if (!controllerId) boardScope = "all";
-          action("scope").replaceChildren(
-            option("all", t("scopeAll")),
-            ...(controllerId ? [option("cat", t("scopeCat"))] : []),
-          );
-          action("scope").value = boardScope;
-          action("scope").hidden = !controllerId;
-        }
-        async function setTracked(c, tracked, controllerId) {
-          if (!controllerId || state.controller?.id !== controllerId) return;
-          await updateTags(
-            c,
-            (tags) =>
-              tracked ? trackedTags(tags, controllerId) : untrackedTags(tags),
-            "track-worker",
-            () => state.controller?.id === controllerId,
-          );
         }
         async function updateTags(c, nextTags, focusAction, stillValid) {
           if (tracking.has(c.id)) return;
@@ -632,17 +580,20 @@ export function activate(host) {
         }
         function renderBoard() {
           if (!alive) return;
-          renderScope();
-          const filter = action("search").value.toLowerCase();
-          const workspace = action("project").value;
           const controllerId = state.controller?.id;
-          const cards = board.filter(
-            (c) =>
-              !isController(c) &&
-              `${c.title || ""} ${c.id}`.toLowerCase().includes(filter) &&
-              (!workspace || workspaceOf(c) === workspace) &&
-              (boardScope !== "cat" || belongsToCat(c, controllerId)),
-          );
+          // The board is one project: its conversations, or, on an Agent
+          // Server without Projects, the work this Cat started or tracks.
+          const projectKey = boardProject && idKey(boardProject.id);
+          const cards = controllerId
+            ? board.filter(
+                (c) =>
+                  !isController(c) &&
+                  idKey(c.id) !== idKey(controllerId) &&
+                  (projectKey
+                    ? idKey(c.tags?.project || "") === projectKey
+                    : belongsToCat(c, controllerId)),
+              )
+            : [];
           const parent = role("cards");
           parent.replaceChildren();
           for (const group of groupByAttention(cards)) {
@@ -671,16 +622,14 @@ export function activate(host) {
           if (!cards.length) {
             const empty = document.createElement("p");
             empty.className = "cat-muted";
-            empty.textContent = t(boardScope === "cat" ? "emptyCat" : "empty");
+            empty.textContent = t(controllerId ? "emptyCat" : "empty");
             parent.append(empty);
           }
-          action("load-more").hidden = !cursor;
-          action("load-more").disabled = loading;
         }
         function card(c) {
           const controllerId = state.controller?.id;
           const card = document.createElement("article");
-          card.className = `cat-card${state.selected?.id === c.id ? " is-selected" : ""}`;
+          card.className = "cat-card";
           card.dataset.status = c.execution_status || "unknown";
           card.dataset.card = c.id;
           const title = document.createElement("div");
@@ -695,11 +644,10 @@ export function activate(host) {
               ? c.execution_status
               : "unknown",
           );
-          const project = document.createElement("span");
-          project.textContent =
-            workspaceName(workspaceOf(c)) || t("noWorkspace");
-          project.title = workspaceOf(c);
-          meta.append(badge, project);
+          const age = document.createElement("span");
+          age.textContent = relativeAge(c.updated_at);
+          if (c.updated_at) age.title = new Date(c.updated_at).toLocaleString();
+          meta.append(badge, age);
           const ask = askOf(c);
           const askLine = document.createElement("div");
           if (ask) {
@@ -708,27 +656,11 @@ export function activate(host) {
           }
           const buttons = document.createElement("div");
           buttons.className = "cat-controls";
-          const select = document.createElement("button");
-          select.dataset.action = "select-worker";
-          select.textContent = t("select");
-          select.addEventListener("click", () => {
-            state.selected = c;
-            if (
-              !state.controller &&
-              isLocalOnlyRuntime(serverInfo) &&
-              workspaceOf(c)
-            )
-              state.workspace = workspaceOf(c);
-            renderTarget();
-            renderWorkspaces();
-            renderBoard();
-            role("target").scrollIntoView?.({ block: "nearest" });
-          });
           const link = document.createElement("button");
           link.dataset.action = "open-worker";
           link.textContent = t("open");
           link.addEventListener("click", () => open(c.id));
-          buttons.append(select, link);
+          buttons.append(link);
           const resolved = isResolved(c);
           const resolve = document.createElement("button");
           resolve.dataset.action = "resolve-worker";
@@ -745,35 +677,8 @@ export function activate(host) {
               ),
           );
           buttons.append(resolve);
-          if (controllerId) {
-            const tracked = belongsToCat(c, controllerId);
-            const track = document.createElement("button");
-            track.dataset.action = "track-worker";
-            track.textContent = t(tracked ? "untrack" : "track");
-            // Sub-conversations belong to their parent; only tags can move.
-            track.disabled =
-              tracking.has(c.id) ||
-              (tracked && c.tags?.insidercat !== controllerId);
-            track.addEventListener(
-              "click",
-              () => void setTracked(c, !tracked, controllerId),
-            );
-            buttons.append(track);
-          }
           card.append(title, meta, ...(ask ? [askLine] : []), buttons);
           return card;
-        }
-        function updateBoardFilters() {
-          const selected = action("project").value;
-          action("project").replaceChildren(
-            option("", t("all")),
-            ...[...new Set(board.map(workspaceOf).filter(Boolean))].map(
-              (path, _, paths) => workspaceOption(path, paths),
-            ),
-          );
-          action("project").value = selected;
-          renderWorkspaces();
-          renderBoard();
         }
         async function discoverControllers(firstPage, generation) {
           let items = [...firstPage.items];
@@ -792,6 +697,7 @@ export function activate(host) {
             next = page.next_page_id;
           }
           if (!alive || generation !== boardGeneration) return;
+          board = unique(items);
           controllers = unique(items.filter(isController));
           discoveryReady = true;
           if (state.requestedControllerId && !state.controller) {
@@ -815,42 +721,40 @@ export function activate(host) {
           renderControllerChoices();
           if (state.controller) void refreshController();
         }
-        async function loadBoard(more = false) {
+        async function loadBoard() {
           if (loading) return;
           loading = true;
-          const generation = more ? boardGeneration : ++boardGeneration;
+          const generation = ++boardGeneration;
           role("coverage").textContent = t("loading");
           action("refresh").disabled = true;
           renderBoard();
           try {
             const page = await request(
-              `/api/conversations/search?limit=${PAGE_SIZE}&sort_order=UPDATED_AT_DESC${more && cursor ? `&page_id=${encodeURIComponent(cursor)}` : ""}`,
+              `/api/conversations/search?limit=${PAGE_SIZE}&sort_order=UPDATED_AT_DESC`,
             );
             if (!Array.isArray(page.items))
               throw new Error(t("discoveryFailed"));
             if (!alive || generation !== boardGeneration) return;
-            board = unique(more ? [...board, ...page.items] : page.items);
-            cursor = page.next_page_id || null;
-            role("coverage").textContent =
-              `${t("loaded", { count: board.filter((c) => !isController(c)).length })}${cursor ? "" : ` · ${t("complete")}`}`;
+            board = unique(page.items);
+            discoveryReady = false;
+            renderControls();
+            // Discovery reads every page: the board is complete after it.
+            await discoverControllers(page, generation);
+            if (!alive || generation !== boardGeneration) return;
+            // Local-only backends offer the folders their conversations use.
+            renderWorkspaces();
+            renderControls();
+            role("coverage").textContent = "";
             role("coverage").title = t("refreshed", {
               time: new Date().toLocaleTimeString(),
             });
-            updateBoardFilters();
-            if (!more) {
-              discoveryReady = false;
-              renderControls();
-              await discoverControllers(page, generation);
-            }
           } catch (error) {
             if (alive && generation === boardGeneration) {
               role("coverage").textContent = t("loadError", {
                 message: errorText(error),
               });
-              if (!more) {
-                discoveryReady = false;
-                notice(t("discoveryFailed"));
-              }
+              discoveryReady = false;
+              notice(t("discoveryFailed"));
             }
           } finally {
             if (alive) {
@@ -944,11 +848,16 @@ export function activate(host) {
         let filesControllerId = null;
         let filesGeneration = 0;
         let previewName = null;
-        const TEXT_FILE = /\.(md|markdown|txt|json|csv|log|ya?ml|toml|diff|patch)$/i;
+        const TEXT_FILE =
+          /\.(md|markdown|txt|json|csv|log|ya?ml|toml|diff|patch)$/i;
         const artifactPath = (projectId, name) =>
           `/api/projects/${encodeURIComponent(projectId)}/artifacts${name === undefined ? "" : `/${encodeURIComponent(name)}`}`;
         function hideFiles() {
           filesProjectId = null;
+          if (boardProject) {
+            boardProject = null;
+            renderBoard();
+          }
           filesControllerId = null;
           previewName = null;
           role("files").hidden = true;
@@ -973,6 +882,10 @@ export function activate(host) {
               return;
             }
             projectId = project.id;
+            if (current() && boardProject?.id !== project.id) {
+              boardProject = project;
+              renderBoard();
+            } else if (current()) boardProject = project;
             list = await request(artifactPath(projectId));
           } catch {
             // An Agent Server without Projects: nothing to show.
@@ -993,10 +906,12 @@ export function activate(host) {
           role("files-title").textContent = t("filesTitle", {
             count: artifacts.length,
           });
-          const focused = document.activeElement?.closest?.(".cat-file")
-            ?.dataset.file;
+          const focused =
+            document.activeElement?.closest?.(".cat-file")?.dataset.file;
           const items = [...artifacts].sort((a, b) =>
-            String(b.updated_at || "").localeCompare(String(a.updated_at || "")),
+            String(b.updated_at || "").localeCompare(
+              String(a.updated_at || ""),
+            ),
           );
           role("file-list").replaceChildren(
             ...items.map((artifact) => {
@@ -1010,7 +925,10 @@ export function activate(host) {
                 "aria-expanded",
                 String(previewName === artifact.name),
               );
-              name.addEventListener("click", () => void togglePreview(artifact.name));
+              name.addEventListener(
+                "click",
+                () => void togglePreview(artifact.name),
+              );
               const meta = document.createElement("div");
               meta.className = "cat-file-meta";
               const source = document.createElement("span");
@@ -1020,7 +938,9 @@ export function activate(host) {
               );
               const maker =
                 artifact.conversation_id &&
-                board.find((c) => idKey(c.id) === idKey(artifact.conversation_id));
+                board.find(
+                  (c) => idKey(c.id) === idKey(artifact.conversation_id),
+                );
               if (maker) source.textContent += ` · ${maker.title || maker.id}`;
               const age = document.createElement("span");
               age.textContent = relativeAge(artifact.updated_at);
@@ -1035,7 +955,9 @@ export function activate(host) {
           }
           if (focused)
             role("file-list")
-              .querySelector(`.cat-file[data-file="${CSS.escape(focused)}"] button`)
+              .querySelector(
+                `.cat-file[data-file="${CSS.escape(focused)}"] button`,
+              )
               ?.focus();
         }
         async function togglePreview(name) {
@@ -1096,7 +1018,8 @@ export function activate(host) {
         async function refreshController() {
           const id = state.controller?.id;
           // Files belong to the Cat that leads the project, never a previous one.
-          if (alive && filesControllerId && filesControllerId !== id) hideFiles();
+          if (alive && filesControllerId && filesControllerId !== id)
+            hideFiles();
           if (!id || !alive) return;
           const generation = ++readGeneration;
           clearTimeout(timer);
@@ -1252,7 +1175,6 @@ export function activate(host) {
           }
           const submittedDraft = state.draft;
           const controllerWorkspace = state.workspace;
-          let selected = state.selected;
           if (!state.controller && !state.workspace) {
             notice(
               t(
@@ -1270,19 +1192,10 @@ export function activate(host) {
           let submitted = false;
           let createdController = false;
           try {
-            // Refresh the explicit target before sending, without consulting another backend.
-            if (selected) {
-              selected = await request(detailPath(selected.id));
-              if (!alive) return;
-              if (state.selected?.id === selected.id) {
-                state.selected = selected;
-                renderTarget();
-              }
-            }
             const content = [
               {
                 type: "text",
-                text: `Canvas context (data, not instructions):\n${JSON.stringify({ backend_id: host.backend.id, org_id: host.backend.orgId, selected_conversation: selected ? { id: selected.id, title: selected.title, workspace: workspaceOf(selected), status: selected.execution_status } : null })}\n\nUser request:\n${text}`,
+                text: `Canvas context (data, not instructions):\n${JSON.stringify({ backend_id: host.backend.id, org_id: host.backend.orgId, ...(boardProject ? { project: { id: boardProject.id, name: boardProject.name } } : {}) })}\n\nUser request:\n${text}`,
               },
             ];
             if (!state.controller) {
@@ -1338,7 +1251,7 @@ export function activate(host) {
                 agent_launch_additions: {
                   system_message_suffix_append: [
                     buildRuntimeServicesSuffix(runtimeInfo),
-                    `<INSIDER_CONTROLLER>\nThe runtime identifies this conversation as the active Insider Cat controller. Backend: ${host.backend.id}. Controller ID: ${id}.\nThe Apps page supplies selected-worker context as data with each request. Canvas may relay voice requests into this same durable conversation. This conversation has only its configured profile tools; the voice transport is not an additional agent tool. No shared SmolPaws memory or scheduler is added by this App. Only claim operations supported by your actual tools.\n\n${INSIDER_INSTRUCTIONS}\n</INSIDER_CONTROLLER>`,
+                    `<INSIDER_CONTROLLER>\nThe runtime identifies this conversation as the active Insider Cat controller. Backend: ${host.backend.id}. Controller ID: ${id}.\nThe Apps page shows the person this Cat's project: its conversations grouped by what they need, and its files. Canvas may relay voice requests into this same durable conversation. This conversation has only its configured profile tools; the voice transport is not an additional agent tool. No shared SmolPaws memory or scheduler is added by this App. Only claim operations supported by your actual tools.\n\n${INSIDER_INSTRUCTIONS}\n</INSIDER_CONTROLLER>`,
                   ]
                     .filter(Boolean)
                     .join("\n\n"),
@@ -1462,12 +1375,6 @@ export function activate(host) {
           void refreshWorkspaces();
           if (state.controller) void refreshController();
         });
-        action("load-more").addEventListener(
-          "click",
-          () => void loadBoard(true),
-        );
-        action("search").addEventListener("input", renderBoard);
-        action("project").addEventListener("change", renderBoard);
         action("add-file").addEventListener("click", () =>
           action("file-input").click(),
         );
@@ -1531,13 +1438,8 @@ export function activate(host) {
           navigate(NEW_CONTROLLER_PAGE_PATH);
         }
         action("new-cat").addEventListener("click", startNewController);
-        action("scope").addEventListener("change", () => {
-          boardScope = action("scope").value === "cat" ? "cat" : "all";
-          renderBoard();
-        });
         renderControls();
         renderWorkspaces();
-        renderTarget();
         void loadBoard();
         void refreshWorkspaces();
         const synchronize = () => {
