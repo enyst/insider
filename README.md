@@ -17,7 +17,7 @@ Projects (conversation sender, reactions, resolved state, the `ask` tag, and
 coordinator message copies) come from
 [Agent Server #6602](https://github.com/OpenHands/software-agent-sdk/pull/6602).
 Voice sends spoken requests through the Agent Server's idle-only
-`POST .../voice/messages` from [#6608](https://github.com/OpenHands/software-agent-sdk/pull/6608);
+`POST .../voice/messages` from [#5180](https://github.com/OpenHands/software-agent-sdk/pull/5180);
 an Agent Server without it refuses to send them.
 See [CHANGELOG.md](CHANGELOG.md) for the release notes. The release remains a
 draft; `main` does not yet contain the companion and Voice behavior described
