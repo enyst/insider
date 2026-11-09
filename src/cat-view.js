@@ -237,6 +237,9 @@ export const catViewStyles = `
 .insider-app .cat-work-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .insider-app .cat-work-head button{font-size:12px;border:0;color:var(--cat-muted)}
 .insider-app .cat-cards{display:grid;gap:4px}
+.insider-app .cat-empty{display:grid;gap:8px;justify-items:start;border:1px dashed var(--cat-line);border-radius:14px;padding:22px;background:var(--cat-wash)}
+.insider-app .cat-empty-title{font-size:14px;font-weight:600}
+.insider-app .cat-empty-hint{font-size:13px;color:var(--cat-muted);overflow-wrap:anywhere}
 .insider-app .cat-group{display:grid}
 .insider-app .cat-group-body{display:grid}
 .insider-app .cat-group-head{justify-self:start;border:0;background:none;padding:12px 0 6px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--cat-muted);cursor:pointer}

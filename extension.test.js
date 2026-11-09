@@ -1050,6 +1050,34 @@ describe("Insider Cat work board", () => {
     );
     expect(groups(app)).toEqual([]);
   });
+
+  it("guides a brand-new project to send its first message", async () => {
+    const app = mountApp({
+      request: ({ path }) =>
+        path.startsWith("/api/conversations/search")
+          ? { items: [], next_page_id: null }
+          : undefined,
+    });
+    await waitFor(() =>
+      expect(app.container.textContent).toContain("No work here yet"),
+    );
+    expect(app.container.textContent).toContain(
+      "Send a message to start your Cat",
+    );
+    expect(app.container.textContent).not.toContain(
+      "No conversations match this view",
+    );
+  });
+
+  it("keeps the view-empty message when work exists but no Cat is chosen", async () => {
+    const app = mountApp();
+    await waitFor(() =>
+      expect(app.container.textContent).toContain(
+        "No conversations match this view",
+      ),
+    );
+    expect(groups(app)).toEqual([]);
+  });
 });
 
 describe("Insider Cat App", () => {
