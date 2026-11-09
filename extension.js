@@ -228,7 +228,7 @@ ${z}`})}catch(ve){let te=$n(ve);if(te)return te;throw ve}let tt=i()+pS;for(;H(I)
 .insider-app .cat-card.is-selected{border-inline-start:2px solid var(--cat-accent);padding-inline-start:12px}
 .insider-app .cat-card-title{font-weight:550;overflow-wrap:anywhere}
 .insider-app .cat-card-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--cat-muted)}
-.insider-app .cat-card-ask{font-size:13px;overflow-wrap:anywhere;border-left:2px solid var(--cat-warn);padding-left:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.insider-app .cat-card-ask{font-size:13px;overflow-wrap:anywhere;border-left:2px solid var(--cat-warn);padding-left:8px}
 .insider-app .cat-card-meta>span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .insider-app .cat-badge::before{content:"";display:inline-block;width:5px;height:5px;margin-inline-end:6px;border-radius:50%;background:currentColor;vertical-align:middle}
 .insider-app .cat-card[data-status=waiting_for_confirmation] .cat-badge{color:var(--cat-warn)}

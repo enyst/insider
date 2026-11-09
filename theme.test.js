@@ -36,10 +36,9 @@ describe("Insider styles follow the Canvas colour theme", () => {
       expect(value).not.toContain(`var(${name})`);
   });
 
-  it("clamps a long ask so it cannot stretch the card", () => {
+  it("keeps a long ask fully readable without clamping", () => {
     const ask = rules.find((rule) => rule.includes(".cat-card-ask{"));
-    expect(ask).toMatch(/display:\s*-webkit-box/);
-    expect(ask).toMatch(/-webkit-line-clamp:\s*2/);
-    expect(ask).toMatch(/overflow:\s*hidden/);
+    expect(ask).not.toMatch(/-webkit-line-clamp/);
+    expect(ask).toMatch(/overflow-wrap:\s*anywhere/);
   });
 });
