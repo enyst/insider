@@ -18,6 +18,7 @@ import {
   groupFor,
   idKey,
   latestPullRequest,
+  pullRequestStatusKeys,
   isResolved,
   relativeAge,
   resolvedTags,
@@ -650,9 +651,44 @@ export function activate(host) {
         const pullRequests = new Map();
         const pullRequestReads = new Map();
         let pullRequestRender = null;
+        // State and CI of each pull request, from the agent server's GitHub
+        // access; read again after a minute so CI can move on.
+        const pullRequestStatuses = new Map();
+        const STATUS_TTL = 60_000;
         function clearPullRequests() {
           pullRequests.clear();
           pullRequestReads.clear();
+          pullRequestStatuses.clear();
+        }
+        function readPullRequestStatus(pr) {
+          const known = pullRequestStatuses.get(pr.url);
+          if (known && Date.now() - known.at < STATUS_TTL) return;
+          const project = boardProject;
+          const entry = { at: Date.now(), status: known?.status || null };
+          pullRequestStatuses.set(pr.url, entry);
+          const stillWanted = () =>
+            alive &&
+            boardProject?.id === project?.id &&
+            pullRequestStatuses.get(pr.url) === entry;
+          request(
+            `/api/git/pull-requests/${encodeURIComponent(pr.owner)}/${encodeURIComponent(pr.repo)}/${pr.number}`,
+          )
+            .then((status) => {
+              if (!stillWanted()) return;
+              const before = JSON.stringify(entry.status);
+              entry.status =
+                status && typeof status.state === "string" ? status : null;
+              if (before !== JSON.stringify(entry.status))
+                schedulePullRequestRender();
+            })
+            .catch(() => {
+              // No GitHub token, an older server, or GitHub is away: the
+              // card keeps its link and shows no state until the next read.
+              if (!stillWanted()) return;
+              const had = entry.status;
+              entry.status = null;
+              if (had) schedulePullRequestRender();
+            });
         }
         // Results arrive one by one: draw them together, keeping focus.
         function schedulePullRequestRender() {
@@ -675,6 +711,8 @@ export function activate(host) {
           if (!project) return;
           for (const c of cards) {
             const key = idKey(c.id);
+            const known = pullRequests.get(key);
+            if (known) readPullRequestStatus(known);
             const version = `${project.id}:${c.updated_at || ""}`;
             if (pullRequestReads.get(key) === version) continue;
             pullRequestReads.set(key, version);
@@ -695,8 +733,10 @@ export function activate(host) {
                     .map((m) => m.text),
                 );
                 const before = pullRequests.get(key)?.url;
-                if (pr) pullRequests.set(key, pr);
-                else pullRequests.delete(key);
+                if (pr) {
+                  pullRequests.set(key, pr);
+                  readPullRequestStatus(pr);
+                } else pullRequests.delete(key);
                 if (before !== pr?.url) schedulePullRequestRender();
               })
               .catch(() => {
@@ -765,7 +805,14 @@ export function activate(host) {
             prLine.href = pr.url;
             prLine.target = "_blank";
             prLine.rel = "noopener noreferrer";
-            prLine.textContent = `PR ${pr.label}`;
+            const words = pullRequestStatusKeys(
+              pullRequestStatuses.get(pr.url)?.status,
+            ).map((k) => t(k));
+            prLine.textContent = [`PR ${pr.label}`, ...words].join(" · ");
+            if (words.length > 1)
+              prLine.dataset.checks = pullRequestStatuses.get(
+                pr.url,
+              ).status.checks;
           }
           card.append(
             title,

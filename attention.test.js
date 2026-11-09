@@ -8,6 +8,7 @@ import {
   relativeAge,
   resolvedTags,
   groupByAttention,
+  pullRequestStatusKeys,
   trackedTags,
   untrackedTags,
 } from "./src/attention.js";
@@ -149,9 +150,9 @@ describe("asks", () => {
 describe("conversation mentions", () => {
   it("splits text around [Title](conversation:<id>) links", () => {
     const id = "33333333333343338333333333333333";
-    expect(
-      mentionParts(`Ask [Fix export](conversation:${id}) first.`),
-    ).toEqual(["Ask ", { title: "Fix export", id }, " first."]);
+    expect(mentionParts(`Ask [Fix export](conversation:${id}) first.`)).toEqual(
+      ["Ask ", { title: "Fix export", id }, " first."],
+    );
     expect(mentionParts(`[A](conversation:${id})`)).toEqual([
       { title: "A", id },
     ]);
@@ -208,5 +209,26 @@ describe("foldReactions", () => {
     ]);
     expect(folded.get("m2")).toEqual([{ emoji: "eyes", sources: ["agent"] }]);
     expect(folded.has("m3")).toBe(false);
+  });
+});
+
+describe("pullRequestStatusKeys", () => {
+  it("names the state, and the checks only while the PR is open", () => {
+    expect(pullRequestStatusKeys(null)).toEqual([]);
+    expect(pullRequestStatusKeys({ state: "open", checks: "none" })).toEqual([
+      "prOpen",
+    ]);
+    expect(
+      pullRequestStatusKeys({ state: "open", draft: true, checks: "pending" }),
+    ).toEqual(["prDraft", "checksPending"]);
+    expect(pullRequestStatusKeys({ state: "open", checks: "success" })).toEqual(
+      ["prOpen", "checksPass"],
+    );
+    expect(
+      pullRequestStatusKeys({ state: "merged", checks: "failure" }),
+    ).toEqual(["prMerged"]);
+    expect(pullRequestStatusKeys({ state: "closed", checks: "none" })).toEqual([
+      "prClosed",
+    ]);
   });
 });

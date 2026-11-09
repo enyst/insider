@@ -218,6 +218,14 @@ describe("Insider Cat work board", () => {
             ],
           };
         if (path.includes("/messages")) return { messages: [] };
+        if (path === "/api/git/pull-requests/enyst/insider/7")
+          return {
+            state: "open",
+            draft: false,
+            title: "Projects header",
+            url: "https://github.com/enyst/insider/pull/7",
+            checks: "failure",
+          };
       }),
     });
     await waitFor(() =>
@@ -234,8 +242,13 @@ describe("Insider Cat work board", () => {
     await waitFor(() =>
       expect(app.container.querySelector(".cat-card-pr")).not.toBeNull(),
     );
+    await waitFor(() =>
+      expect(app.container.querySelector(".cat-card-pr").textContent).toBe(
+        "PR enyst/insider#7 · open · checks failing",
+      ),
+    );
     const pr = app.container.querySelector(".cat-card-pr");
-    expect(pr.textContent).toBe("PR enyst/insider#7");
+    expect(pr.dataset.checks).toBe("failure");
     expect(pr.getAttribute("href")).toBe(
       "https://github.com/enyst/insider/pull/7",
     );
@@ -646,11 +659,13 @@ describe("Insider Cat work board", () => {
       },
     });
     await waitFor(() =>
-      expect(
-        app.container.querySelector(".cat-mention")?.textContent,
-      ).toBe("Ship the board"),
+      expect(app.container.querySelector(".cat-mention")?.textContent).toBe(
+        "Ship the board",
+      ),
     );
-    const row = app.container.querySelector(".cat-mention").closest(".cat-message");
+    const row = app.container
+      .querySelector(".cat-mention")
+      .closest(".cat-message");
     expect(row.textContent).toContain("Ship the board needs your answer.");
     expect(row.textContent).not.toContain("conversation:");
     app.container.querySelector(".cat-mention").click();
