@@ -169,7 +169,7 @@ export const catViewStyles = `
 .insider-app button:disabled,.insider-voice button:disabled{cursor:default;opacity:.45}
 .insider-app .cat-primary,.insider-app .cat-talk,.insider-voice .cat-talk{background:var(--cat-accent);color:var(--cat-ink);border-color:var(--cat-accent);font-weight:650}
 .insider-app .cat-primary:enabled:hover,.insider-app .cat-talk:enabled:hover,.insider-voice .cat-talk:enabled:hover{background:var(--cat-accent-hover);color:var(--cat-ink);border-color:var(--cat-accent-hover)}
-.insider-app :is(button,input,select,textarea,summary):focus-visible,.insider-voice :is(button,summary):focus-visible{outline:2px solid var(--cat-accent);outline-offset:3px}
+.insider-app :is(button,input,select,textarea,summary,a):focus-visible,.insider-voice :is(button,summary):focus-visible{outline:2px solid var(--cat-accent);outline-offset:3px}
 .insider-app [hidden],.insider-voice[hidden],.insider-voice [hidden]{display:none!important}
 .insider-app .cat-controls,.cat-voice-view .cat-voice-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .insider-app select,.insider-app input{width:100%;min-width:0;max-width:100%;text-overflow:ellipsis}
@@ -207,11 +207,12 @@ export const catViewStyles = `
 .insider-app .cat-work-head button{font-size:12px;border:0;color:var(--cat-muted)}
 .insider-app .cat-cards{display:grid;gap:4px}
 .insider-app .cat-group{display:grid}
+.insider-app .cat-group-body{display:grid}
 .insider-app .cat-group-head{justify-self:start;border:0;background:none;padding:12px 0 6px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--cat-muted);cursor:pointer}
 .insider-app .cat-group-head::before{content:"▾";display:inline-block;margin-inline-end:6px;transition:transform .15s}
 .insider-app .cat-group-head[aria-expanded=false]::before{transform:rotate(-90deg)}
 .insider-app .cat-card{padding:16px 0;border-block-start:1px solid var(--cat-line);display:grid;gap:9px;min-width:0}
-.insider-app .cat-card-title{font-weight:550;overflow-wrap:anywhere}
+.insider-app .cat-card-title{font-size:inherit;font-weight:550;color:inherit;overflow-wrap:anywhere}
 .insider-app .cat-card-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--cat-muted)}
 .insider-app .cat-project-goal{margin:0;overflow-wrap:anywhere}
 .insider-app .cat-card-pr{font-size:12px;overflow-wrap:anywhere}
@@ -277,7 +278,7 @@ export const catPageMarkup = `<style>${catViewStyles}</style>
     <section class="cat-stack cat-work">
       <div class="cat-work-head"><h2 data-role="work-title"></h2><button data-action="refresh" data-copy="refresh"></button></div>
       <p data-role="project-goal" class="cat-project-goal" hidden></p><p data-role="project-progress" class="cat-muted" hidden></p>
-      <p data-role="coverage" class="cat-muted" role="status"></p><div data-role="cards" class="cat-cards"></div>
+      <p data-role="coverage" class="cat-muted" role="status"></p><p data-role="board-status" class="cat-sr-only" role="status"></p><div data-role="cards" class="cat-cards"></div>
       <section class="cat-files" data-role="files" hidden>
         <div class="cat-work-head"><h3 data-role="files-title"></h3><button data-action="add-file" data-copy="addFile"></button></div>
         <input data-action="file-input" type="file" hidden>

@@ -197,6 +197,31 @@ describe("Insider Cat work board", () => {
     expect(groups(app)[2]).toEqual(["idle", [idle.title]]);
   });
 
+  it("exposes card actions and groups to assistive technology", async () => {
+    const app = mountApp({
+      request: projectWorld([member(running), member(worker)]),
+    });
+    await waitFor(() => expect(groups(app).length).toBe(2));
+
+    const title = app.container.querySelector(".cat-card-title");
+    expect(title.tagName).toBe("H3");
+    expect(title.textContent).toBe(worker.title);
+
+    expect(find(app, "open-worker").getAttribute("aria-label")).toBe(
+      `Open ${worker.title}`,
+    );
+    expect(find(app, "resolve-worker").getAttribute("aria-label")).toBe(
+      `Resolve ${worker.title}`,
+    );
+
+    const head = find(app, "group-needsYou");
+    expect(head.getAttribute("aria-controls")).toBe("group-panel-needsYou");
+    const panel = app.container.querySelector("#group-panel-needsYou");
+    expect(panel.getAttribute("role")).toBe("group");
+    expect(panel.getAttribute("aria-label")).toBe("Needs you");
+    expect(panel.querySelectorAll(".cat-card").length).toBe(1);
+  });
+
   it("heads the board with the project's name, goal and progress, and links each part's PR", async () => {
     const app = mountApp({
       request: projectWorld([member(running), member(worker)], ({ path }) => {
@@ -251,6 +276,9 @@ describe("Insider Cat work board", () => {
     expect(pr.dataset.checks).toBe("failure");
     expect(pr.getAttribute("href")).toBe(
       "https://github.com/enyst/insider/pull/7",
+    );
+    expect(pr.getAttribute("aria-label")).toBe(
+      "PR enyst/insider#7 · open · checks failing — opens in a new tab",
     );
     expect(pr.closest("[data-card]").dataset.card).toBe(running.id);
     expect(app.container.querySelectorAll(".cat-card-pr").length).toBe(1);
@@ -469,6 +497,9 @@ describe("Insider Cat work board", () => {
     // Resolved starts collapsed; focus follows the card to its group toggle.
     await waitFor(() => expect(groups(app)).toEqual([["resolved", []]]));
     expect(document.activeElement).toBe(find(app, "group-resolved"));
+    expect(
+      app.container.querySelector('[data-role="board-status"]').textContent,
+    ).toBe("Review the project — Resolved");
     find(app, "group-resolved").click();
     expect(document.activeElement).toBe(find(app, "group-resolved"));
     expect(find(app, "resolve-worker").textContent).toBe("Reopen");
@@ -488,6 +519,9 @@ describe("Insider Cat work board", () => {
         project: project.id.replace(/-/g, ""),
       }),
     );
+    expect(
+      app.container.querySelector('[data-role="board-status"]').textContent,
+    ).toBe("Review the project — Finished, ready to check");
   });
 
   it.each([

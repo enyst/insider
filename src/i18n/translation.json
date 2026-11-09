@@ -373,6 +373,9 @@
     "zh-CN": "打开",
     "zh-TW": "開啟"
   },
+  "INSIDER_CAT$OPENS_NEW_TAB": {
+    "en": "opens in a new tab"
+  },
   "INSIDER_CAT$SELECTED": {
     "ar": "نناقش",
     "ca": "Parlant de",
