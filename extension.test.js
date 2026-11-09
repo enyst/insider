@@ -218,7 +218,7 @@ describe("Insider Cat work board", () => {
             ],
           };
         if (path.includes("/messages")) return { messages: [] };
-        if (path === "/api/git/pull-requests/enyst/insider/7")
+        if (path === "/api/git/repositories/enyst/insider/pull-requests/7?provider=github")
           return {
             state: "open",
             draft: false,
@@ -278,7 +278,7 @@ describe("Insider Cat work board", () => {
               },
             ],
           };
-        if (path === "/api/git/pull-requests/enyst/insider/7") {
+        if (path === "/api/git/repositories/enyst/insider/pull-requests/7?provider=github") {
           statusReads += 1;
           return {
             state: "open",
@@ -287,9 +287,9 @@ describe("Insider Cat work board", () => {
             checks: statusReads === 1 ? "pending" : "success",
           };
         }
-        if (path === "/api/git/pull-requests/enyst/insider/8")
-          throw Object.assign(new Error("HTTP request failed (424)"), {
-            status: 424,
+        if (path === "/api/git/repositories/enyst/insider/pull-requests/8?provider=github")
+          throw Object.assign(new Error("HTTP request failed (409)"), {
+            status: 409,
           });
       }),
     });
