@@ -8,9 +8,9 @@ This repository includes the prepared browser bundle, source, skill,
 translations, and tests. Building or installing it does not require Odie's source
 checkout.
 
-The development branch `gpt/insider-voice-discovery` holds the 0.2.0 **Projects**
+The development branch `gpt/insider-voice-discovery` holds the 0.2.0-beta.1 **Projects**
 release, App PRs [#5](https://github.com/enyst/insider/pull/5) through
-[#16](https://github.com/enyst/insider/pull/16), paired with
+[#27](https://github.com/enyst/insider/pull/27), paired with
 [Canvas #19495](https://github.com/OpenHands/OpenHands/pull/19495)
 and [Agent Server #5180](https://github.com/OpenHands/software-agent-sdk/pull/5180).
 Projects (conversation sender, reactions, resolved state, the `ask` tag, and
