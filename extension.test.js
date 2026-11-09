@@ -89,7 +89,11 @@ function mountApp(overrides = {}) {
       kind: "local",
       orgId: null,
     },
-    extension: { name: "insider-cat", version: "0.2.0-beta.1", resolvedRef: null },
+    extension: {
+      name: "insider-cat",
+      version: "0.2.0-beta.1",
+      resolvedRef: null,
+    },
     registerPage: vi.fn((id, factory) => {
       expect(id).toBe("projects");
       mount = factory;
@@ -243,7 +247,10 @@ describe("Insider Cat work board", () => {
             ],
           };
         if (path.includes("/messages")) return { messages: [] };
-        if (path === "/api/git/repositories/enyst/insider/pull-requests/7?provider=github")
+        if (
+          path ===
+          "/api/git/repositories/enyst/insider/pull-requests/7?provider=github"
+        )
           return {
             state: "open",
             draft: false,
@@ -306,7 +313,10 @@ describe("Insider Cat work board", () => {
               },
             ],
           };
-        if (path === "/api/git/repositories/enyst/insider/pull-requests/7?provider=github") {
+        if (
+          path ===
+          "/api/git/repositories/enyst/insider/pull-requests/7?provider=github"
+        ) {
           statusReads += 1;
           return {
             state: "open",
@@ -315,7 +325,10 @@ describe("Insider Cat work board", () => {
             checks: statusReads === 1 ? "pending" : "success",
           };
         }
-        if (path === "/api/git/repositories/enyst/insider/pull-requests/8?provider=github")
+        if (
+          path ===
+          "/api/git/repositories/enyst/insider/pull-requests/8?provider=github"
+        )
           throw Object.assign(new Error("HTTP request failed (409)"), {
             status: 409,
           });
@@ -340,6 +353,32 @@ describe("Insider Cat work board", () => {
       ),
     );
     expect(statusReads).toBe(2);
+  });
+
+  it("keeps one Cat per project: no chooser inside a Cat, and projects listed by name", async () => {
+    const app = mountApp({ request: projectWorld([member(running)]) });
+    await waitFor(() =>
+      expect(
+        app.container.querySelector('[data-role="work-title"]').textContent,
+      ).toBe("Release 0.2"),
+    );
+    const picker = app.container.querySelector('[data-role="picker"]');
+    expect(picker.hidden).toBe(true);
+    expect(find(app, "all-projects").hidden).toBe(false);
+    click(app, "all-projects");
+    expect(picker.hidden).toBe(false);
+    expect(find(app, "all-projects").hidden).toBe(true);
+    expect(find(app, "controller").value).toBe("");
+    expect(
+      [...find(app, "controller").options].map((o) => o.textContent),
+    ).toEqual(["Choose a project", "Release 0.2"]);
+    expect(find(app, "new-cat").textContent).toBe("New project");
+    expect(app.host.navigate).toHaveBeenLastCalledWith(
+      "/extensions/insider-cat/projects",
+    );
+    click(app, "new-cat");
+    expect(picker.hidden).toBe(true);
+    expect(find(app, "all-projects").hidden).toBe(false);
   });
 
   it("shows what an asking conversation needs on its card", async () => {

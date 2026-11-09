@@ -38,6 +38,7 @@ const REF_TIMEOUT = 4000;
 const CONTROLLER_STORAGE_PREFIX = "insider-cat:controller:";
 const NEW_COMMAND = "/new";
 const CONDENSE_COMMAND = "/condense";
+const PROJECT_LIST_PAGE_PATH = "/extensions/insider-cat/projects";
 const NEW_CONTROLLER_PAGE_PATH = "/extensions/insider-cat/projects/new";
 const controllerPagePath = (id) =>
   `/extensions/insider-cat/projects/conversations/${encodeURIComponent(id)}`;
@@ -388,6 +389,10 @@ export function activate(host) {
           ),
         );
         let controllers = [];
+        // Project names by their Cat, to name each project in the chooser.
+        let projectNamesByCat = new Map();
+        // The person asked for the project list; don't open the only Cat.
+        let choosingProject = false;
         let workspaces = [];
         let workspaceDiscoveryReady = false;
         let workspaceGeneration = 0;
@@ -489,6 +494,13 @@ export function activate(host) {
           action("new-cat").disabled =
             state.busy || state.uncertain || !discoveryReady;
           action("controller").disabled = state.busy || state.uncertain;
+          // A Cat's window belongs to its one project: choosing or starting
+          // another project happens on the project list.
+          role("picker").hidden =
+            Boolean(state.controller) || state.newRequested;
+          action("all-projects").hidden =
+            !state.controller && !state.newRequested;
+          action("all-projects").disabled = state.busy || state.uncertain;
           action("open-controller").hidden = !state.controller;
           // A new Cat runs in the first host workspace; ask only when none is known.
           role("workspace-field").hidden =
@@ -501,10 +513,14 @@ export function activate(host) {
           action("controller").replaceChildren(
             option("", t("chooseController")),
             ...controllers.map((c) => {
-              const title = c.title || t("cat");
+              const title =
+                projectNamesByCat.get(idKey(c.id)) || c.title || t("cat");
               const duplicate = controllers.some(
                 (other) =>
-                  other.id !== c.id && (other.title || t("cat")) === title,
+                  other.id !== c.id &&
+                  (projectNamesByCat.get(idKey(other.id)) ||
+                    other.title ||
+                    t("cat")) === title,
               );
               const node = option(
                 c.id,
@@ -639,8 +655,7 @@ export function activate(host) {
             body.id = `group-panel-${group.id}`;
             body.setAttribute("role", "group");
             body.setAttribute("aria-label", t(groupCopy[group.id]));
-            if (!collapsed)
-              for (const c of group.items) body.append(card(c));
+            if (!collapsed) for (const c of group.items) body.append(card(c));
             section.append(head, body);
             parent.append(section);
           }
@@ -899,6 +914,13 @@ export function activate(host) {
           if (!alive || generation !== boardGeneration) return;
           board = unique(items);
           controllers = unique(items.filter(isController));
+          const projects = await request("/api/projects").catch(() => null);
+          if (!alive || generation !== boardGeneration) return;
+          projectNamesByCat = new Map(
+            (projects?.projects || [])
+              .filter((p) => p?.coordinator_conversation_id && p.name)
+              .map((p) => [idKey(p.coordinator_conversation_id), p.name]),
+          );
           discoveryReady = true;
           if (state.requestedControllerId && !state.controller) {
             state.controller =
@@ -914,6 +936,7 @@ export function activate(host) {
             !state.controller &&
             !state.controllerInvalid &&
             !state.newRequested &&
+            !choosingProject &&
             controllers.length === 1
           )
             state.controller = controllers[0];
@@ -1639,6 +1662,24 @@ export function activate(host) {
           action("draft").value = "";
           notice("");
           renderControls();
+        });
+        action("all-projects").addEventListener("click", () => {
+          if (state.busy || state.uncertain) return;
+          choosingProject = true;
+          state.controller = null;
+          state.newRequested = false;
+          state.requestedControllerId = null;
+          state.controllerInvalid = false;
+          state.mutationNotice = null;
+          ++readGeneration;
+          clearTimeout(timer);
+          role("history").replaceChildren();
+          forgetProject();
+          rememberController();
+          renderControllerChoices();
+          renderBoard();
+          navigate(PROJECT_LIST_PAGE_PATH);
+          action("controller").focus();
         });
         action("controller").addEventListener("change", () => {
           if (state.busy || state.uncertain) return;
