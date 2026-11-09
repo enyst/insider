@@ -10,22 +10,19 @@ checkout.
 
 ## Try it in 5 minutes
 
-You need a running **Agent Canvas** connected to a **local Agent Server** with
-Apps endpoints and profile launch additions available, plus an active OpenHands
+You need **Agent Canvas** with a **local Agent Server** and an active OpenHands
 agent profile. Canvas Apps do not support cloud backends.
 
 1. Open **Customize → Apps → Add app**, set **App source** to
    `github:enyst/insider`, **Ref** to `gpt/insider-voice-discovery`, and leave
    **Path** empty. Review and enable **Insider Cat**.
 2. Open **Projects** at `/extensions/insider-cat/projects`.
-3. Select **New project**. In **Workspace**, pick a saved host workspace for the
-   Cat (the App preselects the first available). If the list is empty, add a
-   workspace in Canvas and refresh.
-4. Type a message and click **Send**. Your first message creates the saved Cat
-   and starts it with your active profile.
+3. Select **New project** and choose a **Workspace** for the Cat. If none
+   appears, add one in Canvas and refresh.
+4. Type a message and click **Send**. Your first message creates and starts the
+   Cat.
 
-Keep chatting in the panel, open the full conversation for tools and approvals,
-or select **Talk** to try Voice ([see setup](#voice)).
+Then try **Talk** for Voice ([setup](#voice)).
 
 The development branch `gpt/insider-voice-discovery` holds the 0.2.0-beta.1 **Projects**
 release, App PRs [#5](https://github.com/enyst/insider/pull/5) through
