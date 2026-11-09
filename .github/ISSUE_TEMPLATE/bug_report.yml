@@ -1,0 +1,69 @@
+name: Bug report
+description: Tell us about a problem with Insider Cat so we can fix it.
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! The details below help us understand and
+        reproduce the problem. Please fill in what you can.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem in your own words.
+      placeholder: "Insider Cat stopped responding after I started a voice call."
+    validations:
+      required: true
+  - type: textarea
+    id: what-expected
+    attributes:
+      label: What did you expect to happen?
+      description: Tell us what should have happened instead.
+      placeholder: "I expected Insider Cat to keep replying during the call."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the steps someone can follow to see the bug.
+      placeholder: |
+        1. Open the Insider Cat Projects page.
+        2. Select a Cat conversation.
+        3. Start a voice call and ask a question.
+    validations:
+      required: true
+  - type: input
+    id: os-browser
+    attributes:
+      label: Operating system and browser
+      description: Which OS and browser are you using?
+      placeholder: "e.g. macOS 15 with Chrome 132"
+    validations:
+      required: true
+  - type: input
+    id: canvas-version
+    attributes:
+      label: Agent Canvas version
+      description: The Agent Canvas version you're running, if you can find it.
+      placeholder: "e.g. 0.20.0"
+    validations:
+      required: false
+  - type: input
+    id: app-version
+    attributes:
+      label: Insider Cat app version
+      description: The version of the Insider Cat app you're running.
+      placeholder: "0.2.0-beta.1"
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Paste any error messages, logs, or add screenshots that might help.
+      placeholder: "Any relevant output, error text, or a screenshot link."
+    validations:
+      required: false
