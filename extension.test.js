@@ -226,6 +226,26 @@ describe("Insider Cat work board", () => {
     expect(panel.querySelectorAll(".cat-card").length).toBe(1);
   });
 
+  it("formats card relative timestamps in the app's selected language", async () => {
+    localStorage.setItem("i18nextLng", "fr");
+    const app = mountApp({
+      request: projectWorld([
+        member({
+          ...running,
+          updated_at: new Date(Date.now() - 5 * 60_000).toISOString(),
+        }),
+      ]),
+    });
+    await waitFor(() => expect(groups(app).length).toBe(1));
+    const meta = app.container.querySelector(".cat-card-meta");
+    const age = meta.querySelectorAll("span")[1];
+    const expected = new Intl.RelativeTimeFormat("fr", {
+      numeric: "auto",
+      style: "narrow",
+    }).format(-5, "minute");
+    expect(age.textContent).toBe(expected);
+  });
+
   it("heads the board with the project's name, goal and progress, and links each part's PR", async () => {
     const app = mountApp({
       request: projectWorld([member(running), member(worker)], ({ path }) => {

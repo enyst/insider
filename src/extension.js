@@ -425,6 +425,9 @@ export function activate(host) {
         let noticeKind = null;
         const root = document.createElement("section");
         root.className = "insider-app";
+        // The app's selected language lives on the i18n wrapper's `lang`
+        // attribute; timestamps must follow it, not the browser locale.
+        const locale = () => root.closest("[lang]")?.lang || undefined;
         root.innerHTML = catPageMarkup;
         activePageRoot = root;
         watchAwayStatus();
@@ -920,8 +923,9 @@ export function activate(host) {
               : "unknown",
           );
           const age = document.createElement("span");
-          age.textContent = relativeAge(c.updated_at);
-          if (c.updated_at) age.title = new Date(c.updated_at).toLocaleString();
+          age.textContent = relativeAge(c.updated_at, Date.now(), locale());
+          if (c.updated_at)
+            age.title = new Date(c.updated_at).toLocaleString(locale());
           meta.append(badge, age);
           const ask = askOf(c);
           const askLine = document.createElement("div");
@@ -1181,11 +1185,7 @@ export function activate(host) {
                     : "unknown",
                 );
           meta.append(badge);
-          const age = relativeAge(
-            c.updated_at,
-            Date.now(),
-            root.closest("[lang]")?.lang || undefined,
-          );
+          const age = relativeAge(c.updated_at, Date.now(), locale());
           if (age) {
             const when = document.createElement("span");
             when.textContent = age;
@@ -1321,7 +1321,11 @@ export function activate(host) {
                 );
               if (maker) source.textContent += ` · ${maker.title || maker.id}`;
               const age = document.createElement("span");
-              age.textContent = relativeAge(artifact.updated_at);
+              age.textContent = relativeAge(
+                artifact.updated_at,
+                Date.now(),
+                locale(),
+              );
               meta.append(source, age);
               item.append(name, meta);
               return item;
