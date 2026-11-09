@@ -760,11 +760,24 @@ export function activate(host) {
             section.append(head, body);
             parent.append(section);
           }
-          if (!cards.length) {
-            const empty = document.createElement("p");
-            empty.className = "cat-muted";
-            empty.textContent = t(controllerId ? "emptyCat" : "empty");
-            parent.append(empty);
+          if (!cards.length && !loading) {
+            if (!board.length) {
+              const empty = document.createElement("div");
+              empty.className = "cat-empty";
+              const title = document.createElement("p");
+              title.className = "cat-empty-title";
+              title.textContent = t("emptyFirstRunTitle");
+              const hint = document.createElement("p");
+              hint.className = "cat-empty-hint";
+              hint.textContent = t("emptyFirstRunHint");
+              empty.append(title, hint);
+              parent.append(empty);
+            } else {
+              const empty = document.createElement("p");
+              empty.className = "cat-muted";
+              empty.textContent = t(controllerId ? "emptyCat" : "empty");
+              parent.append(empty);
+            }
           }
         }
         // The project's name, goal and how its work stands, above the cards.
