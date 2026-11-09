@@ -1059,10 +1059,10 @@ describe("Insider Cat work board", () => {
           : undefined,
     });
     await waitFor(() =>
-      expect(app.container.textContent).toContain("No work here yet"),
+      expect(app.container.textContent).toContain("Nothing on the board yet"),
     );
     expect(app.container.textContent).toContain(
-      "Send a message to start your Cat",
+      "Tell your Cat what to do first.",
     );
     expect(app.container.textContent).not.toContain(
       "No conversations match this view",
