@@ -7,7 +7,7 @@ Notable changes to Insider Cat, newest first.
 - Talk and dictate from beside Send: real-time voice moved to a waveform button next to Send, plus a microphone that dictates into your draft ([#34](https://github.com/enyst/insider/pull/34)).
 - A friendlier first run: empty boards welcome you with a hint, and the empty Cat panel suggests starter prompts ([#37](https://github.com/enyst/insider/pull/37), [#47](https://github.com/enyst/insider/pull/47)).
 - Easier to get started: a plain-language "What is Insider?" section and a "Try it in 5 minutes" quick start ([#46](https://github.com/enyst/insider/pull/46), [#35](https://github.com/enyst/insider/pull/35), [#39](https://github.com/enyst/insider/pull/39)).
-- Screen readers hear the board's Open, Resolve and Reopen labels and the "opens in a new tab" hint in every language, with natural word order; a test now keeps every string translated into all 15 languages.
+- The board's Open, Resolve and Reopen labels for screen readers now fit each language's word order while keeping the visible button text whole, and the "opens in a new tab" hint is translated; a test now keeps every string translated into all 15 languages.
 
 ## [0.2.0-beta.1] - 2026-11-09
 
