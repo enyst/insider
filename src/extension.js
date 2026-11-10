@@ -98,22 +98,44 @@ function creationPolicy(settings) {
   };
 }
 
-function supportsControllerLaunch(schema) {
-  let node =
-    schema?.paths?.["/api/conversations"]?.post?.requestBody?.content?.[
-      "application/json"
-    ]?.schema;
+// Follows $ref (and a nullable anyOf) to the schema object it names.
+function resolveSchema(schema, node) {
   const seen = new Set();
-  while (
-    node?.$ref?.startsWith("#/components/schemas/") &&
-    !seen.has(node.$ref)
-  ) {
+  for (;;) {
+    if (node?.anyOf) node = node.anyOf.find((n) => n?.type !== "null");
+    if (!node?.$ref?.startsWith("#/components/schemas/") || seen.has(node.$ref))
+      return node;
     seen.add(node.$ref);
     node = schema.components?.schemas?.[node.$ref.split("/").pop()];
   }
+}
+
+function requestBodySchema(schema, path) {
+  return resolveSchema(
+    schema,
+    schema?.paths?.[path]?.post?.requestBody?.content?.["application/json"]
+      ?.schema,
+  );
+}
+
+function supportsControllerLaunch(schema) {
+  const node = requestBodySchema(schema, "/api/conversations");
   return Boolean(
     node?.properties?.agent_launch_additions &&
     node?.properties?.agent_profile_id,
+  );
+}
+
+// A server that can start a project's coordinator with the Cat's own launch
+// fields, so the Cat gets the coordinator's project tools.
+export function supportsCoordinatorLaunch(schema) {
+  const coordinator = resolveSchema(
+    schema,
+    requestBodySchema(schema, "/api/projects")?.properties?.coordinator,
+  );
+  return Boolean(
+    coordinator?.properties?.conversation_id &&
+    coordinator?.properties?.agent_launch_additions,
   );
 }
 
@@ -131,6 +153,14 @@ function isNotFound(error) {
   const status = error?.status ?? error?.response?.status ?? error?.statusCode;
   if (status !== undefined) return Number(status) === 404;
   return /\b404\b|not found/i.test(String(error?.message || ""));
+}
+
+// The HTTP status of a failed request, or undefined when no answer arrived.
+function httpStatus(error) {
+  const status = error?.status ?? error?.response?.status ?? error?.statusCode;
+  if (status !== undefined) return Number(status);
+  const match = /\((\d{3})\)/.exec(String(error?.message || ""));
+  return match ? Number(match[1]) : undefined;
 }
 
 // A new Cat's project is named from the first line of the person's first
@@ -1725,9 +1755,10 @@ export function activate(host) {
               // coordinator, which gives it the project tools; a Cat linked
               // to a project afterwards would lack them. A server with
               // Projects off answers 404, and the Cat works from tags.
+              // A server without that start keeps the Cat out of projects.
               let info = null;
               let project = null;
-              if (!projectsOff) {
+              if (!projectsOff && supportsCoordinatorLaunch(schema)) {
                 try {
                   project = await request("/api/projects", "POST", {
                     name: projectNameFrom(text),
@@ -1738,12 +1769,21 @@ export function activate(host) {
                       title: t("cat"),
                     },
                   });
-                  if (!alive) return;
-                  info = await request(detailPath(id));
                 } catch (error) {
-                  if (!isNotFound(error)) throw error;
-                  projectsOff = true;
+                  if (isNotFound(error)) {
+                    projectsOff = true;
+                  } else {
+                    // The server answered: a failed start leaves no project
+                    // and no Cat, so nothing is uncertain.
+                    if (httpStatus(error) !== undefined) {
+                      submitted = false;
+                      state.controller = null;
+                    }
+                    throw error;
+                  }
                 }
+                if (!alive) return;
+                if (project) info = await request(detailPath(id));
               }
               info ||= await request("/api/conversations", "POST", {
                 ...launch,
