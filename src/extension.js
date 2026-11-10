@@ -98,22 +98,44 @@ function creationPolicy(settings) {
   };
 }
 
-function supportsControllerLaunch(schema) {
-  let node =
-    schema?.paths?.["/api/conversations"]?.post?.requestBody?.content?.[
-      "application/json"
-    ]?.schema;
+// Follows $ref (and a nullable anyOf) to the schema object it names.
+function resolveSchema(schema, node) {
   const seen = new Set();
-  while (
-    node?.$ref?.startsWith("#/components/schemas/") &&
-    !seen.has(node.$ref)
-  ) {
+  for (;;) {
+    if (node?.anyOf) node = node.anyOf.find((n) => n?.type !== "null");
+    if (!node?.$ref?.startsWith("#/components/schemas/") || seen.has(node.$ref))
+      return node;
     seen.add(node.$ref);
     node = schema.components?.schemas?.[node.$ref.split("/").pop()];
   }
+}
+
+function requestBodySchema(schema, path) {
+  return resolveSchema(
+    schema,
+    schema?.paths?.[path]?.post?.requestBody?.content?.["application/json"]
+      ?.schema,
+  );
+}
+
+function supportsControllerLaunch(schema) {
+  const node = requestBodySchema(schema, "/api/conversations");
   return Boolean(
     node?.properties?.agent_launch_additions &&
     node?.properties?.agent_profile_id,
+  );
+}
+
+// A server that can start a project's coordinator with the Cat's own launch
+// fields, so the Cat gets the coordinator's project tools.
+export function supportsCoordinatorLaunch(schema) {
+  const coordinator = resolveSchema(
+    schema,
+    requestBodySchema(schema, "/api/projects")?.properties?.coordinator,
+  );
+  return Boolean(
+    coordinator?.properties?.conversation_id &&
+    coordinator?.properties?.agent_launch_additions,
   );
 }
 
@@ -131,6 +153,14 @@ function isNotFound(error) {
   const status = error?.status ?? error?.response?.status ?? error?.statusCode;
   if (status !== undefined) return Number(status) === 404;
   return /\b404\b|not found/i.test(String(error?.message || ""));
+}
+
+// The HTTP status of a failed request, or undefined when no answer arrived.
+function httpStatus(error) {
+  const status = error?.status ?? error?.response?.status ?? error?.statusCode;
+  if (status !== undefined) return Number(status);
+  const match = /\((\d{3})\)/.exec(String(error?.message || ""));
+  return match ? Number(match[1]) : undefined;
 }
 
 // A new Cat's project is named from the first line of the person's first
@@ -1654,7 +1684,6 @@ export function activate(host) {
           renderControls();
           let submitted = false;
           let createdController = false;
-          let projectError = null;
           try {
             // Read at send time: a new Cat's project exists only just before.
             const requestContent = () => [
@@ -1703,17 +1732,15 @@ export function activate(host) {
                 execution_status: "idle",
               };
               submitted = true;
-              const info = await request("/api/conversations", "POST", {
+              const runtime =
+                runtimeInfo.available_conversation_runtimes?.includes("local")
+                  ? { conversation_runtime: "local" }
+                  : {};
+              const launch = {
                 conversation_id: id,
                 agent_profile_id: profile.id,
-                workspace: { working_dir: controllerWorkspace },
-                ...(runtimeInfo.available_conversation_runtimes?.includes(
-                  "local",
-                )
-                  ? { conversation_runtime: "local" }
-                  : {}),
+                ...runtime,
                 tags: CONTROLLER_TAGS,
-                autotitle: false,
                 agent_launch_additions: {
                   system_message_suffix_append: [
                     buildRuntimeServicesSuffix(runtimeInfo),
@@ -1723,21 +1750,59 @@ export function activate(host) {
                     .join("\n\n"),
                 },
                 ...creationPolicy(settings),
-                // With Projects, the first request waits until the Cat's
-                // project exists, so the workers it starts join the project.
-                // (The server runs any initial message at once.)
-                ...(projectsOff
-                  ? { initial_message: { role: "user", content, run: true } }
-                  : {}),
+              };
+              // With Projects, the server starts the Cat as the project's
+              // coordinator, which gives it the project tools; a Cat linked
+              // to a project afterwards would lack them. A server with
+              // Projects off answers 404, and the Cat works from tags.
+              // A server without that start keeps the Cat out of projects.
+              let info = null;
+              let project = null;
+              if (!projectsOff && supportsCoordinatorLaunch(schema)) {
+                try {
+                  project = await request("/api/projects", "POST", {
+                    name: projectNameFrom(text),
+                    description: text.slice(0, PROJECT_GOAL_MAX),
+                    coordinator: {
+                      ...launch,
+                      working_dir: controllerWorkspace,
+                      title: t("cat"),
+                    },
+                  });
+                } catch (error) {
+                  if (isNotFound(error)) {
+                    projectsOff = true;
+                  } else {
+                    // The server answered: a failed start leaves no project
+                    // and no Cat, so nothing is uncertain.
+                    if (httpStatus(error) !== undefined) {
+                      submitted = false;
+                      state.controller = null;
+                    }
+                    throw error;
+                  }
+                }
+                if (!alive) return;
+                if (project) info = await request(detailPath(id));
+              }
+              info ||= await request("/api/conversations", "POST", {
+                ...launch,
+                workspace: { working_dir: controllerWorkspace },
+                autotitle: false,
+                initial_message: { role: "user", content, run: true },
               });
               state.controller = info;
               state.newRequested = false;
               createdController = true;
               rememberController();
               controllers = unique([...controllers, info]);
-              if (!projectsOff) {
-                projectError = await createProjectFor(info.id, text);
+              if (project) {
                 if (!alive) return;
+                if (project.id) {
+                  projectNamesByCat.set(idKey(info.id), project.name);
+                  setBoardProject(project);
+                }
+                // The coordinator starts idle; the first request follows.
                 await request(`${detailPath(info.id)}/events`, "POST", {
                   role: "user",
                   content: requestContent(),
@@ -1770,9 +1835,7 @@ export function activate(host) {
               );
             }
             if (state.draft === submittedDraft) state.draft = "";
-            state.mutationNotice = projectError
-              ? { key: "projectCreateError", params: { message: projectError } }
-              : { key: "accepted" };
+            state.mutationNotice = { key: "accepted" };
             if (alive) {
               action("draft").value = state.draft;
               notice(savedMutationNotice());
@@ -1929,26 +1992,6 @@ export function activate(host) {
             action("draft").focus();
           }
         });
-        // Every project has its own Cat: a new Cat creates its backend
-        // project with itself as coordinator. A server with Projects off
-        // answers 404, and the Cat works from tags as before.
-        async function createProjectFor(controllerId, requestText) {
-          try {
-            const project = await request("/api/projects", "POST", {
-              name: projectNameFrom(requestText),
-              description: requestText.slice(0, PROJECT_GOAL_MAX),
-              coordinator_conversation_id: controllerId,
-            });
-            if (alive && project?.id) {
-              projectNamesByCat.set(idKey(controllerId), project.name);
-              setBoardProject(project);
-            }
-          } catch (error) {
-            if (isNotFound(error)) projectsOff = true;
-            else return errorText(error);
-          }
-          return null;
-        }
         function startNewController() {
           if (state.busy || state.uncertain) return;
           state.choosingProject = false;
