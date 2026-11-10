@@ -74,6 +74,22 @@ function mountApp(overrides = {}) {
     if (path === "/server_info") return { conversation_runtime: "local" };
     if (path === "/api/conversations" && method === "POST")
       return { ...controller, id: body.conversation_id };
+    // The server starts a new project's coordinator from the same launch
+    // fields; route it through the conversation create so tests can read it.
+    if (path === "/api/projects" && method === "POST" && body?.coordinator) {
+      const { working_dir, title, ...launch } = body.coordinator;
+      const info = await request({
+        path: "/api/conversations",
+        method: "POST",
+        body: { ...launch, workspace: { working_dir } },
+      });
+      return {
+        id: "55555555-5555-4555-8555-555555555555",
+        name: body.name,
+        description: body.description,
+        coordinator_conversation_id: info.id,
+      };
+    }
     if (path.includes("/events/search"))
       return { items: [], next_page_id: null };
     if (path.endsWith("/events")) return { success: true };
@@ -204,7 +220,8 @@ describe("Insider Cat work board", () => {
       if (result !== undefined) return result;
       if (args.path.startsWith("/api/conversations/search"))
         return { items: [controller, ...items], next_page_id: null };
-      if (args.path === "/api/projects") return { projects: [project] };
+      if (args.path === "/api/projects" && (args.method ?? "GET") === "GET")
+        return { projects: [project] };
       if (args.path === `/api/projects/${project.id}/artifacts`)
         return { artifacts: [] };
     };
@@ -1775,11 +1792,21 @@ describe("Insider Cat App", () => {
     const projectCreate = calls.findIndex(
       (call) => call.method === "POST" && call.path === "/api/projects",
     );
-    expect(calls[projectCreate].body).toEqual({
+    // The server starts the Cat as the project's coordinator, so the Cat
+    // gets the coordinator's project tools.
+    expect(calls[projectCreate].body).toMatchObject({
       name: "Explain this work.",
       description: "Explain this work.",
-      coordinator_conversation_id: create.body.conversation_id,
+      coordinator: {
+        conversation_id: create.body.conversation_id,
+        working_dir: "/projects/example",
+        tags: controller.tags,
+        agent_profile_id: "33333333-3333-4333-8333-333333333333",
+      },
     });
+    expect(calls[projectCreate].body).not.toHaveProperty(
+      "coordinator_conversation_id",
+    );
     const firstSend = calls.findIndex(
       (call) =>
         call.method === "POST" &&
@@ -1849,7 +1876,7 @@ describe("Insider Cat App", () => {
     ).toBe(false);
   });
 
-  it("still starts the Cat and says so when its project cannot be created", async () => {
+  it("starts no Cat and keeps the draft when its project cannot be created", async () => {
     const app = mountApp({
       request: async ({ path, method }) => {
         if (path === "/api/projects" && method === "POST")
@@ -1864,18 +1891,18 @@ describe("Insider Cat App", () => {
     draft(app, "Explain this work.");
     click(app, "send");
     await waitFor(() =>
-      expect(app.request).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: "POST",
-          path: expect.stringMatching(/^\/api\/conversations\/[^/]+\/events$/),
-        }),
-      ),
+      expect(app.container.textContent).toContain("HTTP request failed (500)"),
     );
-    await waitFor(() =>
-      expect(app.container.textContent).toContain(
-        "The Cat started, but its project could not be created",
+    // A coordinator start failure leaves no project and no Cat behind.
+    expect(
+      app.request.mock.calls.some(
+        ([call]) =>
+          call.method === "POST" &&
+          (call.path === "/api/conversations" ||
+            /\/api\/conversations\/[^/]+\/events$/.test(call.path)),
       ),
-    );
+    ).toBe(false);
+    expect(find(app, "draft").value).toBe("Explain this work.");
   });
 
   it("adds only its owning backend's advertised runtime context without replacing the active profile", async () => {

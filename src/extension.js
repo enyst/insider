@@ -1654,7 +1654,6 @@ export function activate(host) {
           renderControls();
           let submitted = false;
           let createdController = false;
-          let projectError = null;
           try {
             // Read at send time: a new Cat's project exists only just before.
             const requestContent = () => [
@@ -1703,17 +1702,15 @@ export function activate(host) {
                 execution_status: "idle",
               };
               submitted = true;
-              const info = await request("/api/conversations", "POST", {
+              const runtime =
+                runtimeInfo.available_conversation_runtimes?.includes("local")
+                  ? { conversation_runtime: "local" }
+                  : {};
+              const launch = {
                 conversation_id: id,
                 agent_profile_id: profile.id,
-                workspace: { working_dir: controllerWorkspace },
-                ...(runtimeInfo.available_conversation_runtimes?.includes(
-                  "local",
-                )
-                  ? { conversation_runtime: "local" }
-                  : {}),
+                ...runtime,
                 tags: CONTROLLER_TAGS,
-                autotitle: false,
                 agent_launch_additions: {
                   system_message_suffix_append: [
                     buildRuntimeServicesSuffix(runtimeInfo),
@@ -1723,21 +1720,49 @@ export function activate(host) {
                     .join("\n\n"),
                 },
                 ...creationPolicy(settings),
-                // With Projects, the first request waits until the Cat's
-                // project exists, so the workers it starts join the project.
-                // (The server runs any initial message at once.)
-                ...(projectsOff
-                  ? { initial_message: { role: "user", content, run: true } }
-                  : {}),
+              };
+              // With Projects, the server starts the Cat as the project's
+              // coordinator, which gives it the project tools; a Cat linked
+              // to a project afterwards would lack them. A server with
+              // Projects off answers 404, and the Cat works from tags.
+              let info = null;
+              let project = null;
+              if (!projectsOff) {
+                try {
+                  project = await request("/api/projects", "POST", {
+                    name: projectNameFrom(text),
+                    description: text.slice(0, PROJECT_GOAL_MAX),
+                    coordinator: {
+                      ...launch,
+                      working_dir: controllerWorkspace,
+                      title: t("cat"),
+                    },
+                  });
+                  if (!alive) return;
+                  info = await request(detailPath(id));
+                } catch (error) {
+                  if (!isNotFound(error)) throw error;
+                  projectsOff = true;
+                }
+              }
+              info ||= await request("/api/conversations", "POST", {
+                ...launch,
+                workspace: { working_dir: controllerWorkspace },
+                autotitle: false,
+                initial_message: { role: "user", content, run: true },
               });
               state.controller = info;
               state.newRequested = false;
               createdController = true;
               rememberController();
               controllers = unique([...controllers, info]);
-              if (!projectsOff) {
-                projectError = await createProjectFor(info.id, text);
+              if (project) {
                 if (!alive) return;
+                if (project.id) {
+                  projectNamesByCat.set(idKey(info.id), project.name);
+                  setBoardProject(project);
+                }
+                // The coordinator starts idle; the first request follows.
                 await request(`${detailPath(info.id)}/events`, "POST", {
                   role: "user",
                   content: requestContent(),
@@ -1770,9 +1795,7 @@ export function activate(host) {
               );
             }
             if (state.draft === submittedDraft) state.draft = "";
-            state.mutationNotice = projectError
-              ? { key: "projectCreateError", params: { message: projectError } }
-              : { key: "accepted" };
+            state.mutationNotice = { key: "accepted" };
             if (alive) {
               action("draft").value = state.draft;
               notice(savedMutationNotice());
@@ -1929,26 +1952,6 @@ export function activate(host) {
             action("draft").focus();
           }
         });
-        // Every project has its own Cat: a new Cat creates its backend
-        // project with itself as coordinator. A server with Projects off
-        // answers 404, and the Cat works from tags as before.
-        async function createProjectFor(controllerId, requestText) {
-          try {
-            const project = await request("/api/projects", "POST", {
-              name: projectNameFrom(requestText),
-              description: requestText.slice(0, PROJECT_GOAL_MAX),
-              coordinator_conversation_id: controllerId,
-            });
-            if (alive && project?.id) {
-              projectNamesByCat.set(idKey(controllerId), project.name);
-              setBoardProject(project);
-            }
-          } catch (error) {
-            if (isNotFound(error)) projectsOff = true;
-            else return errorText(error);
-          }
-          return null;
-        }
         function startNewController() {
           if (state.busy || state.uncertain) return;
           state.choosingProject = false;
