@@ -742,44 +742,22 @@ export function activate(host) {
           renderBoard();
           let announce = null;
           try {
-            // A project's member resolves and reopens through the server's
-            // own routes; Agent Server keeps the board keys in tags as it has
-            // them, so a tag PATCH is only for servers without those routes.
-            // Any card on a project board tries the route; a 404 (not a
-            // member, or a server without the route) or 405 falls back.
-            const viaServer = Boolean(boardProject);
-            let done = false;
-            let fresh = null;
-            if (viaServer) {
-              try {
-                await request(
-                  `/api/projects/${encodeURIComponent(boardProject.id)}/conversations/${encodeURIComponent(c.id)}/${resolved ? "resolve" : "reopen"}`,
-                  "POST",
-                );
-                done = true;
-              } catch (error) {
-                const status = httpStatus(error);
-                if (status !== 404 && status !== 405) throw error;
-              }
-            }
+            // Agent Server owns the board state: resolve and reopen go
+            // through the project's routes, which also clear the note.
+            const project = boardProject;
+            if (!project) return;
+            await request(
+              `/api/projects/${encodeURIComponent(project.id)}/conversations/${encodeURIComponent(c.id)}/${resolved ? "resolve" : "reopen"}`,
+              "POST",
+            );
             if (!alive) return;
-            let tags = null;
-            if (!done) {
-              // A tag update replaces the whole set: start from the saved tags.
-              fresh = await request(detailPath(c.id));
-              if (!alive) return;
-              tags = resolvedTags(fresh?.tags, resolved);
-              await request(detailPath(c.id), "PATCH", { tags });
-              if (!alive) return;
-            }
             // Build from the item as it stands now: a refresh may have
             // brought newer tags while the request was out.
             board = board.map((item) => {
               if (item.id !== c.id) return item;
-              if (tags) return { ...item, ...(fresh || {}), tags };
-              const next = resolvedTags(item.tags, resolved);
-              delete next.resolvenote;
-              return { ...item, tags: next };
+              const tags = resolvedTags(item.tags, resolved);
+              delete tags.resolvenote;
+              return { ...item, tags };
             });
             // A members read that started before this change is stale.
             serverBoardGeneration += 1;
@@ -1162,7 +1140,8 @@ export function activate(host) {
             () =>
               void setResolved(c, !resolved, "resolve-worker"),
           );
-          buttons.append(resolve);
+          // Only a project's members can be resolved.
+          if (boardProject) buttons.append(resolve);
           const pr = boardProject && pullRequests.get(idKey(c.id));
           const prLine = document.createElement("a");
           if (pr) {
