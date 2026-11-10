@@ -43,8 +43,22 @@ export const askOf = (conversation) => {
     : "";
 };
 
+// Agent Server Projects' own grouping of a member conversation. Asked and
+// blocked work both need the person, as on Canvas's project board.
+const SERVER_GROUPS = {
+  needs_you: "needsYou",
+  needs_input: "needsYou",
+  working: "working",
+  finished: "finished",
+  idle: "idle",
+  resolved: "resolved",
+};
+
 /** The board group a conversation belongs to. */
 export function groupFor(conversation) {
+  // A project member carries the server's `attention`; use it as is.
+  const fromServer = SERVER_GROUPS[conversation?.attention];
+  if (fromServer) return fromServer;
   let group = groupOf.get(conversation?.execution_status) || "other";
   // A turn that ended on a question needs the person, unless they resolved it.
   if (

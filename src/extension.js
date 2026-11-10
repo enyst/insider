@@ -450,6 +450,10 @@ export function activate(host) {
         const missingRefs = new Set();
         // The project this Cat coordinates, when the Agent Server has Projects.
         let boardProject = null;
+        // The project's members as Agent Server groups them, so this board
+        // and Canvas's agree. Null until read, and on servers without it.
+        let serverBoard = null;
+        let serverBoardGeneration = 0;
         const collapsedGroups = new Set(COLLAPSED_GROUPS);
         const tracking = new Set();
         const groupCopy = Object.fromEntries(
@@ -778,16 +782,26 @@ export function activate(host) {
           // The board is one project: its conversations, or, on an Agent
           // Server without Projects, the work this Cat started or tracks.
           const projectKey = boardProject && idKey(boardProject.id);
-          const cards = controllerId
-            ? board.filter(
-                (c) =>
-                  !isController(c) &&
-                  idKey(c.id) !== idKey(controllerId) &&
-                  (projectKey
-                    ? idKey(c.tags?.project || "") === projectKey
-                    : belongsToCat(c, controllerId)),
-              )
-            : [];
+          const members =
+            projectKey && serverBoard?.projectKey === projectKey
+              ? serverBoard.conversations
+              : null;
+          const cards = !controllerId
+            ? []
+            : members
+              ? members
+                  .filter(
+                    (m) => idKey(m.conversation_id) !== idKey(controllerId),
+                  )
+                  .map((m) => boardCard(m))
+              : board.filter(
+                  (c) =>
+                    !isController(c) &&
+                    idKey(c.id) !== idKey(controllerId) &&
+                    (projectKey
+                      ? idKey(c.tags?.project || "") === projectKey
+                      : belongsToCat(c, controllerId)),
+                );
           const grouped = groupByAttention(cards);
           renderProjectHead(grouped);
           readPullRequests(cards);
@@ -841,6 +855,59 @@ export function activate(host) {
               parent.append(empty);
             }
           }
+        }
+        // A project member as a card: the conversation the board already
+        // knows, with the server's attention, title and status on top.
+        function boardCard(member) {
+          const known = board.find(
+            (c) => idKey(c.id) === idKey(member.conversation_id),
+          );
+          const tags = { ...(known?.tags || {}) };
+          for (const [key, value] of [
+            ["turn", member.turn],
+            ["ask", member.ask],
+            ["resolved", member.resolved],
+          ])
+            if (value) tags[key] = value;
+            else delete tags[key];
+          return {
+            ...(known || {}),
+            id: known?.id || member.conversation_id,
+            title: member.title ?? known?.title,
+            execution_status: member.execution_status,
+            updated_at: member.updated_at ?? known?.updated_at,
+            created_at: member.created_at ?? known?.created_at,
+            parent_conversation_id:
+              member.parent_conversation_id ?? known?.parent_conversation_id,
+            tags,
+            attention: member.attention,
+          };
+        }
+        async function loadServerBoard() {
+          const project = boardProject;
+          const generation = ++serverBoardGeneration;
+          if (!project) {
+            serverBoard = null;
+            return;
+          }
+          try {
+            const result = await request(
+              `/api/projects/${encodeURIComponent(project.id)}/conversations`,
+            );
+            if (!alive || generation !== serverBoardGeneration) return;
+            serverBoard = Array.isArray(result?.conversations)
+              ? {
+                  projectKey: idKey(project.id),
+                  conversations: result.conversations,
+                }
+              : null;
+          } catch (error) {
+            if (!alive || generation !== serverBoardGeneration) return;
+            // Without the route (or the project), group from tags. Any
+            // other failure keeps the last answer until the next refresh.
+            if (isNotFound(error)) serverBoard = null;
+          }
+          renderBoard();
         }
         // The project's name, goal and how its work stands, above the cards.
         function renderProjectHead(grouped) {
@@ -1155,6 +1222,8 @@ export function activate(host) {
             // Discovery reads every page: the board is complete after it.
             await discoverControllers(page, generation);
             if (!alive || generation !== boardGeneration) return;
+            await loadServerBoard();
+            if (!alive || generation !== boardGeneration) return;
             // Local-only backends offer the folders their conversations use.
             renderWorkspaces();
             renderControls();
@@ -1296,8 +1365,11 @@ export function activate(host) {
         const artifactPath = (projectId, name) =>
           `/api/projects/${encodeURIComponent(projectId)}/artifacts${name === undefined ? "" : `/${encodeURIComponent(name)}`}`;
         function setBoardProject(project) {
-          if ((boardProject?.id || null) !== (project?.id || null))
+          if ((boardProject?.id || null) !== (project?.id || null)) {
             clearPullRequests();
+            serverBoard = null;
+            if (project) queueMicrotask(() => void loadServerBoard());
+          }
           // Voice requests read the project from the shared state.
           state.project = project
             ? { id: project.id, name: project.name }

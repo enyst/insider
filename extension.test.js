@@ -281,6 +281,80 @@ describe("Insider Cat work board", () => {
         return { artifacts: [] };
     };
 
+  it("groups a project's work the way Agent Server does", async () => {
+    // Insider's own rule would put an idle conversation that asked something
+    // in Needs you; the server keeps it idle, and Canvas shows the same.
+    const asked = {
+      ...member(idle),
+      tags: { ...member(idle).tags, turn: "asked", ask: "Ship it?" },
+    };
+    const serverOnly = {
+      conversation_id: "88888888-8888-4888-8888-888888888888",
+      title: "Started by the server",
+      execution_status: "finished",
+      attention: "needs_input",
+      turn: "asked",
+      ask: "Which branch?",
+      created_at: "2026-11-10T12:00:00Z",
+      updated_at: "2026-11-10T12:00:00Z",
+    };
+    const app = mountApp({
+      request: projectWorld([asked, member(running)], ({ path }) => {
+        if (path === `/api/projects/${project.id}/conversations`)
+          return {
+            project_id: project.id,
+            coordinator: null,
+            conversations: [
+              serverOnly,
+              {
+                conversation_id: running.id,
+                title: running.title,
+                execution_status: "running",
+                attention: "working",
+                created_at: "2026-11-10T12:00:00Z",
+                updated_at: "2026-11-10T12:00:00Z",
+              },
+              {
+                conversation_id: idle.id,
+                title: idle.title,
+                execution_status: "idle",
+                attention: "idle",
+                turn: "asked",
+                ask: "Ship it?",
+                created_at: "2026-11-10T12:00:00Z",
+                updated_at: "2026-11-10T12:00:00Z",
+              },
+            ],
+          };
+      }),
+    });
+    await waitFor(() =>
+      expect(groups(app)).toEqual([
+        ["needsYou", [serverOnly.title]],
+        ["working", [running.title]],
+        ["idle", []],
+      ]),
+    );
+  });
+
+  it("groups a project from tags on a server without the members list", async () => {
+    const asked = {
+      ...member(idle),
+      tags: { ...member(idle).tags, turn: "asked", ask: "Ship it?" },
+    };
+    const app = mountApp({
+      request: projectWorld([asked], ({ path }) => {
+        if (path === `/api/projects/${project.id}/conversations`)
+          throw Object.assign(new Error("HTTP request failed (404)"), {
+            status: 404,
+          });
+      }),
+    });
+    await waitFor(() =>
+      expect(groups(app)).toEqual([["needsYou", [idle.title]]]),
+    );
+  });
+
   it("groups the project's work by what it needs and collapses idle work", async () => {
     const app = mountApp({
       request: projectWorld([member(idle), member(running), member(worker)]),
