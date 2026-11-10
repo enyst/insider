@@ -28,6 +28,7 @@ import {
   isResolved,
   relativeAge,
   resolvedTags,
+  withResolved,
 } from "./attention.js";
 import {
   CONTROLLER_TAGS,
@@ -750,7 +751,18 @@ export function activate(host) {
             board = board.map((item) =>
               item.id === c.id ? { ...item, ...fresh, tags } : item,
             );
-            const moved = board.find((item) => item.id === c.id);
+            // The server's members list moves the card too, until the next
+            // read confirms it.
+            if (serverBoard)
+              serverBoard = {
+                ...serverBoard,
+                conversations: serverBoard.conversations.map((m) =>
+                  idKey(m.conversation_id) === idKey(c.id)
+                    ? withResolved(m, tags.resolved || null)
+                    : m,
+                ),
+              };
+            const moved = currentCard(c.id);
             if (moved)
               announce = `${moved.title || moved.id} — ${t(groupCopy[groupFor(moved)])}`;
           } catch (error) {
@@ -761,7 +773,7 @@ export function activate(host) {
               renderBoard();
               // A resolved card may move into a collapsed group: keep focus
               // on that group's toggle instead of losing it.
-              const moved = board.find((item) => item.id === c.id);
+              const moved = currentCard(c.id);
               restoreFocus(
                 `[data-card="${c.id}"] [data-action="${focusAction}"]`,
                 moved && `[data-action="group-${groupFor(moved)}"]`,
@@ -794,6 +806,7 @@ export function activate(host) {
                     (m) => idKey(m.conversation_id) !== idKey(controllerId),
                   )
                   .map((m) => boardCard(m))
+                  .filter((c) => !isController(c))
               : board.filter(
                   (c) =>
                     !isController(c) &&
@@ -863,12 +876,10 @@ export function activate(host) {
             (c) => idKey(c.id) === idKey(member.conversation_id),
           );
           const tags = { ...(known?.tags || {}) };
-          for (const [key, value] of [
-            ["turn", member.turn],
-            ["ask", member.ask],
-            ["resolved", member.resolved],
-          ])
-            if (value) tags[key] = value;
+          // Only fields the server reported replace the known tags.
+          for (const key of ["turn", "ask", "resolved"])
+            if (!(key in member)) continue;
+            else if (member[key]) tags[key] = member[key];
             else delete tags[key];
           return {
             ...(known || {}),
@@ -883,6 +894,18 @@ export function activate(host) {
             attention: member.attention,
           };
         }
+        // The card the board shows for a conversation right now.
+        function currentCard(id) {
+          const member =
+            boardProject &&
+            serverBoard?.projectKey === idKey(boardProject.id) &&
+            serverBoard.conversations.find(
+              (m) => idKey(m.conversation_id) === idKey(id),
+            );
+          return member
+            ? boardCard(member)
+            : board.find((item) => item.id === id);
+        }
         async function loadServerBoard() {
           const project = boardProject;
           const generation = ++serverBoardGeneration;
@@ -891,9 +914,15 @@ export function activate(host) {
             return;
           }
           try {
-            const result = await request(
-              `/api/projects/${encodeURIComponent(project.id)}/conversations`,
-            );
+            // A slow read must not hold the board's refresh up.
+            const result = await Promise.race([
+              request(
+                `/api/projects/${encodeURIComponent(project.id)}/conversations`,
+              ),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("timeout")), REF_TIMEOUT),
+              ),
+            ]);
             if (!alive || generation !== serverBoardGeneration) return;
             serverBoard = Array.isArray(result?.conversations)
               ? {

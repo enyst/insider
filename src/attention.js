@@ -54,6 +54,29 @@ const SERVER_GROUPS = {
   resolved: "resolved",
 };
 
+/**
+ * A project member after the person resolved (`"user"`) or reopened (`null`)
+ * it, with its attention worked out as Agent Server does: blocked and running
+ * work keep theirs, and a finished turn that asked something needs input.
+ */
+export function withResolved(member, resolved) {
+  const next = { ...member, resolved };
+  if (["needs_you", "working"].includes(member.attention)) return next;
+  if (resolved) return { ...next, attention: "resolved" };
+  const status = member.execution_status;
+  next.attention =
+    status === "finished"
+      ? member.turn === "asked"
+        ? "needs_input"
+        : "finished"
+      : status === "idle"
+        ? "idle"
+        : member.attention === "resolved"
+          ? "idle"
+          : member.attention;
+  return next;
+}
+
 /** The board group a conversation belongs to. */
 export function groupFor(conversation) {
   // A project member carries the server's `attention`; use it as is.

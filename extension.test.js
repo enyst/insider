@@ -824,6 +824,63 @@ describe("Insider Cat work board", () => {
     expect(app.container.querySelector(".cat-cards").textContent).not.toBe("");
   });
 
+  it("moves a resolved card at once on a server-grouped board, and back on reopen", async () => {
+    let saved = { project: project.id.replace(/-/g, "") };
+    let membersReads = 0;
+    const app = mountApp({
+      request: projectWorld([], ({ path, method, body }) => {
+        if (path.startsWith("/api/conversations/search"))
+          return {
+            items: [
+              controller,
+              { ...worker, execution_status: "finished", tags: saved },
+            ],
+            next_page_id: null,
+          };
+        if (path === `/api/conversations/${worker.id}` && method === "GET")
+          return { ...worker, execution_status: "finished", tags: saved };
+        if (method === "PATCH") {
+          saved = body.tags;
+          return { success: true };
+        }
+        // The server's list lags: it still reports the first answer.
+        if (path === `/api/projects/${project.id}/conversations`) {
+          membersReads += 1;
+          return {
+            project_id: project.id,
+            coordinator: null,
+            conversations: [
+              {
+                conversation_id: worker.id,
+                title: worker.title,
+                execution_status: "finished",
+                attention: "finished",
+                resolved: null,
+                turn: null,
+                ask: null,
+                created_at: "2026-11-10T12:00:00Z",
+                updated_at: "2026-11-10T12:00:00Z",
+              },
+            ],
+          };
+        }
+      }),
+    });
+    await waitFor(() => expect(membersReads).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(groups(app)).toEqual([["finished", [worker.title]]]),
+    );
+    click(app, "resolve-worker");
+    await waitFor(() => expect(groups(app)).toEqual([["resolved", []]]));
+    expect(document.activeElement).toBe(find(app, "group-resolved"));
+    find(app, "group-resolved").click();
+    expect(find(app, "resolve-worker").textContent).toBe("Reopen");
+    click(app, "resolve-worker");
+    await waitFor(() =>
+      expect(groups(app)).toEqual([["finished", [worker.title]]]),
+    );
+  });
+
   it("resolves from the saved tags, keeps focus, reopens, and reports a failed update", async () => {
     let saved = { team: "web", project: project.id.replace(/-/g, "") };
     let fail = false;
