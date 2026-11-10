@@ -43,8 +43,45 @@ export const askOf = (conversation) => {
     : "";
 };
 
+// Agent Server Projects' own grouping of a member conversation. Asked and
+// blocked work both need the person, as on Canvas's project board.
+const SERVER_GROUPS = {
+  needs_you: "needsYou",
+  needs_input: "needsYou",
+  working: "working",
+  finished: "finished",
+  idle: "idle",
+  resolved: "resolved",
+};
+
+/**
+ * A project member after the person resolved (`"user"`) or reopened (`null`)
+ * it, with its attention worked out as Agent Server does: blocked and running
+ * work keep theirs, and a finished turn that asked something needs input.
+ */
+export function withResolved(member, resolved) {
+  const next = { ...member, resolved };
+  if (["needs_you", "working"].includes(member.attention)) return next;
+  if (resolved) return { ...next, attention: "resolved" };
+  const status = member.execution_status;
+  next.attention =
+    status === "finished"
+      ? member.turn === "asked"
+        ? "needs_input"
+        : "finished"
+      : status === "idle"
+        ? "idle"
+        : member.attention === "resolved"
+          ? "idle"
+          : member.attention;
+  return next;
+}
+
 /** The board group a conversation belongs to. */
 export function groupFor(conversation) {
+  // A project member carries the server's `attention`; use it as is.
+  const fromServer = SERVER_GROUPS[conversation?.attention];
+  if (fromServer) return fromServer;
   let group = groupOf.get(conversation?.execution_status) || "other";
   // A turn that ended on a question needs the person, unless they resolved it.
   if (

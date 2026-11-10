@@ -28,6 +28,7 @@ import {
   isResolved,
   relativeAge,
   resolvedTags,
+  withResolved,
 } from "./attention.js";
 import {
   CONTROLLER_TAGS,
@@ -450,6 +451,10 @@ export function activate(host) {
         const missingRefs = new Set();
         // The project this Cat coordinates, when the Agent Server has Projects.
         let boardProject = null;
+        // The project's members as Agent Server groups them, so this board
+        // and Canvas's agree. Null until read, and on servers without it.
+        let serverBoard = null;
+        let serverBoardGeneration = 0;
         const collapsedGroups = new Set(COLLAPSED_GROUPS);
         const tracking = new Set();
         const groupCopy = Object.fromEntries(
@@ -746,7 +751,18 @@ export function activate(host) {
             board = board.map((item) =>
               item.id === c.id ? { ...item, ...fresh, tags } : item,
             );
-            const moved = board.find((item) => item.id === c.id);
+            // The server's members list moves the card too, until the next
+            // read confirms it.
+            if (serverBoard)
+              serverBoard = {
+                ...serverBoard,
+                conversations: serverBoard.conversations.map((m) =>
+                  idKey(m.conversation_id) === idKey(c.id)
+                    ? withResolved(m, tags.resolved || null)
+                    : m,
+                ),
+              };
+            const moved = currentCard(c.id);
             if (moved)
               announce = `${moved.title || moved.id} — ${t(groupCopy[groupFor(moved)])}`;
           } catch (error) {
@@ -757,7 +773,7 @@ export function activate(host) {
               renderBoard();
               // A resolved card may move into a collapsed group: keep focus
               // on that group's toggle instead of losing it.
-              const moved = board.find((item) => item.id === c.id);
+              const moved = currentCard(c.id);
               restoreFocus(
                 `[data-card="${c.id}"] [data-action="${focusAction}"]`,
                 moved && `[data-action="group-${groupFor(moved)}"]`,
@@ -778,16 +794,27 @@ export function activate(host) {
           // The board is one project: its conversations, or, on an Agent
           // Server without Projects, the work this Cat started or tracks.
           const projectKey = boardProject && idKey(boardProject.id);
-          const cards = controllerId
-            ? board.filter(
-                (c) =>
-                  !isController(c) &&
-                  idKey(c.id) !== idKey(controllerId) &&
-                  (projectKey
-                    ? idKey(c.tags?.project || "") === projectKey
-                    : belongsToCat(c, controllerId)),
-              )
-            : [];
+          const members =
+            projectKey && serverBoard?.projectKey === projectKey
+              ? serverBoard.conversations
+              : null;
+          const cards = !controllerId
+            ? []
+            : members
+              ? members
+                  .filter(
+                    (m) => idKey(m.conversation_id) !== idKey(controllerId),
+                  )
+                  .map((m) => boardCard(m))
+                  .filter((c) => !isController(c))
+              : board.filter(
+                  (c) =>
+                    !isController(c) &&
+                    idKey(c.id) !== idKey(controllerId) &&
+                    (projectKey
+                      ? idKey(c.tags?.project || "") === projectKey
+                      : belongsToCat(c, controllerId)),
+                );
           const grouped = groupByAttention(cards);
           renderProjectHead(grouped);
           readPullRequests(cards);
@@ -841,6 +868,75 @@ export function activate(host) {
               parent.append(empty);
             }
           }
+        }
+        // A project member as a card: the conversation the board already
+        // knows, with the server's attention, title and status on top.
+        function boardCard(member) {
+          const known = board.find(
+            (c) => idKey(c.id) === idKey(member.conversation_id),
+          );
+          const tags = { ...(known?.tags || {}) };
+          // Only fields the server reported replace the known tags.
+          for (const key of ["turn", "ask", "resolved"])
+            if (!(key in member)) continue;
+            else if (member[key]) tags[key] = member[key];
+            else delete tags[key];
+          return {
+            ...(known || {}),
+            id: known?.id || member.conversation_id,
+            title: member.title ?? known?.title,
+            execution_status: member.execution_status,
+            updated_at: member.updated_at ?? known?.updated_at,
+            created_at: member.created_at ?? known?.created_at,
+            parent_conversation_id:
+              member.parent_conversation_id ?? known?.parent_conversation_id,
+            tags,
+            attention: member.attention,
+          };
+        }
+        // The card the board shows for a conversation right now.
+        function currentCard(id) {
+          const member =
+            boardProject &&
+            serverBoard?.projectKey === idKey(boardProject.id) &&
+            serverBoard.conversations.find(
+              (m) => idKey(m.conversation_id) === idKey(id),
+            );
+          return member
+            ? boardCard(member)
+            : board.find((item) => item.id === id);
+        }
+        async function loadServerBoard() {
+          const project = boardProject;
+          const generation = ++serverBoardGeneration;
+          if (!project) {
+            serverBoard = null;
+            return;
+          }
+          try {
+            // A slow read must not hold the board's refresh up.
+            const result = await Promise.race([
+              request(
+                `/api/projects/${encodeURIComponent(project.id)}/conversations`,
+              ),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("timeout")), REF_TIMEOUT),
+              ),
+            ]);
+            if (!alive || generation !== serverBoardGeneration) return;
+            serverBoard = Array.isArray(result?.conversations)
+              ? {
+                  projectKey: idKey(project.id),
+                  conversations: result.conversations,
+                }
+              : null;
+          } catch (error) {
+            if (!alive || generation !== serverBoardGeneration) return;
+            // Without the route (or the project), group from tags. Any
+            // other failure keeps the last answer until the next refresh.
+            if (isNotFound(error)) serverBoard = null;
+          }
+          renderBoard();
         }
         // The project's name, goal and how its work stands, above the cards.
         function renderProjectHead(grouped) {
@@ -1155,6 +1251,8 @@ export function activate(host) {
             // Discovery reads every page: the board is complete after it.
             await discoverControllers(page, generation);
             if (!alive || generation !== boardGeneration) return;
+            await loadServerBoard();
+            if (!alive || generation !== boardGeneration) return;
             // Local-only backends offer the folders their conversations use.
             renderWorkspaces();
             renderControls();
@@ -1296,8 +1394,11 @@ export function activate(host) {
         const artifactPath = (projectId, name) =>
           `/api/projects/${encodeURIComponent(projectId)}/artifacts${name === undefined ? "" : `/${encodeURIComponent(name)}`}`;
         function setBoardProject(project) {
-          if ((boardProject?.id || null) !== (project?.id || null))
+          if ((boardProject?.id || null) !== (project?.id || null)) {
             clearPullRequests();
+            serverBoard = null;
+            if (project) queueMicrotask(() => void loadServerBoard());
+          }
           // Voice requests read the project from the shared state.
           state.project = project
             ? { id: project.id, name: project.name }
