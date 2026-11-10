@@ -745,8 +745,11 @@ export function activate(host) {
             // A project's member resolves and reopens through the server's
             // own routes; Agent Server keeps the board keys in tags as it has
             // them, so a tag PATCH is only for servers without those routes.
-            const viaServer = boardProject && memberOfServerBoard(c.id);
+            // Any card on a project board tries the route; a 404 (not a
+            // member, or a server without the route) or 405 falls back.
+            const viaServer = Boolean(boardProject);
             let done = false;
+            let fresh = null;
             if (viaServer) {
               try {
                 await request(
@@ -760,21 +763,26 @@ export function activate(host) {
               }
             }
             if (!alive) return;
-            let tags;
-            if (done) {
-              tags = resolvedTags(c.tags, resolved);
-              delete tags.resolvenote;
-            } else {
+            let tags = null;
+            if (!done) {
               // A tag update replaces the whole set: start from the saved tags.
-              const fresh = await request(detailPath(c.id));
+              fresh = await request(detailPath(c.id));
               if (!alive) return;
               tags = resolvedTags(fresh?.tags, resolved);
               await request(detailPath(c.id), "PATCH", { tags });
               if (!alive) return;
             }
-            board = board.map((item) =>
-              item.id === c.id ? { ...item, tags } : item,
-            );
+            // Build from the item as it stands now: a refresh may have
+            // brought newer tags while the request was out.
+            board = board.map((item) => {
+              if (item.id !== c.id) return item;
+              if (tags) return { ...item, ...(fresh || {}), tags };
+              const next = resolvedTags(item.tags, resolved);
+              delete next.resolvenote;
+              return { ...item, tags: next };
+            });
+            // A members read that started before this change is stale.
+            serverBoardGeneration += 1;
             // The server's members list moves the card too, until the next
             // read confirms it.
             if (serverBoard)
@@ -782,7 +790,7 @@ export function activate(host) {
                 ...serverBoard,
                 conversations: serverBoard.conversations.map((m) =>
                   idKey(m.conversation_id) === idKey(c.id)
-                    ? withResolved(m, tags.resolved || null)
+                    ? withResolved(m, resolved ? "user" : null)
                     : m,
                 ),
               };
@@ -805,15 +813,6 @@ export function activate(host) {
               if (announce) announceBoard(announce);
             }
           }
-        }
-        function memberOfServerBoard(id) {
-          return Boolean(
-            boardProject &&
-              serverBoard?.projectKey === idKey(boardProject.id) &&
-              serverBoard.conversations.some(
-                (m) => idKey(m.conversation_id) === idKey(id),
-              ),
-          );
         }
         function restoreFocus(selector, fallback) {
           (

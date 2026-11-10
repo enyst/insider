@@ -917,6 +917,9 @@ describe("Insider Cat work board", () => {
           };
         if (path === `/api/conversations/${worker.id}` && method === "GET")
           return { ...worker, execution_status: "finished", tags: saved };
+        // A server without the resolve and reopen routes.
+        if (method === "POST" && /\/(resolve|reopen)$/.test(path))
+          throw Object.assign(new Error("Not Found (404)"), { status: 404 });
         if (method === "PATCH") {
           if (fail) throw new Error("tag update refused");
           saved = body.tags;
