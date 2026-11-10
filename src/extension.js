@@ -736,20 +736,44 @@ export function activate(host) {
           workspaceDiscoveryReady = true;
           renderWorkspaces();
         }
-        async function updateTags(c, nextTags, focusAction, stillValid) {
+        async function setResolved(c, resolved, focusAction) {
           if (tracking.has(c.id)) return;
           tracking.add(c.id);
           renderBoard();
           let announce = null;
           try {
-            // A tag update replaces the whole set: start from the saved tags.
-            const fresh = await request(detailPath(c.id));
-            if (!alive || !stillValid()) return;
-            const tags = nextTags(fresh?.tags);
-            await request(detailPath(c.id), "PATCH", { tags });
+            // A project's member resolves and reopens through the server's
+            // own routes; Agent Server keeps the board keys in tags as it has
+            // them, so a tag PATCH is only for servers without those routes.
+            const viaServer = boardProject && memberOfServerBoard(c.id);
+            let done = false;
+            if (viaServer) {
+              try {
+                await request(
+                  `/api/projects/${encodeURIComponent(boardProject.id)}/conversations/${encodeURIComponent(c.id)}/${resolved ? "resolve" : "reopen"}`,
+                  "POST",
+                );
+                done = true;
+              } catch (error) {
+                const status = httpStatus(error);
+                if (status !== 404 && status !== 405) throw error;
+              }
+            }
             if (!alive) return;
+            let tags;
+            if (done) {
+              tags = resolvedTags(c.tags, resolved);
+              delete tags.resolvenote;
+            } else {
+              // A tag update replaces the whole set: start from the saved tags.
+              const fresh = await request(detailPath(c.id));
+              if (!alive) return;
+              tags = resolvedTags(fresh?.tags, resolved);
+              await request(detailPath(c.id), "PATCH", { tags });
+              if (!alive) return;
+            }
             board = board.map((item) =>
-              item.id === c.id ? { ...item, ...fresh, tags } : item,
+              item.id === c.id ? { ...item, tags } : item,
             );
             // The server's members list moves the card too, until the next
             // read confirms it.
@@ -781,6 +805,15 @@ export function activate(host) {
               if (announce) announceBoard(announce);
             }
           }
+        }
+        function memberOfServerBoard(id) {
+          return Boolean(
+            boardProject &&
+              serverBoard?.projectKey === idKey(boardProject.id) &&
+              serverBoard.conversations.some(
+                (m) => idKey(m.conversation_id) === idKey(id),
+              ),
+          );
         }
         function restoreFocus(selector, fallback) {
           (
@@ -1128,12 +1161,7 @@ export function activate(host) {
           resolve.addEventListener(
             "click",
             () =>
-              void updateTags(
-                c,
-                (tags) => resolvedTags(tags, !resolved),
-                "resolve-worker",
-                () => true,
-              ),
+              void setResolved(c, !resolved, "resolve-worker"),
           );
           buttons.append(resolve);
           const pr = boardProject && pullRequests.get(idKey(c.id));
