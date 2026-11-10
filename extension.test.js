@@ -818,16 +818,17 @@ describe("Insider Cat work board", () => {
     await waitFor(() =>
       expect(groups(app)).toEqual([["working", [running.title]]]),
     );
+    // Resolving is a project's board state; there is no project here.
+    expect(
+      app.container.querySelector('[data-action="resolve-worker"]'),
+    ).toBeNull();
     find(app, "controller").value = other.id;
     find(app, "controller").dispatchEvent(new Event("change"));
     expect(groups(app)).toEqual([]);
     expect(app.container.querySelector(".cat-cards").textContent).not.toBe("");
   });
 
-  it.each([
-    ["through the project's resolve and reopen routes", true],
-    ["through tags when the server has no such routes", false],
-  ])("moves a resolved card at once on a server-grouped board, and back on reopen, %s", async (_, routes) => {
+  it("moves a resolved card at once on a server-grouped board, and back on reopen", async () => {
     let saved = { project: project.id.replace(/-/g, "") };
     let membersReads = 0;
     const posts = [];
@@ -835,8 +836,6 @@ describe("Insider Cat work board", () => {
       request: projectWorld([], ({ path, method, body }) => {
         const base = `/api/projects/${project.id}/conversations/${worker.id}/`;
         if (path.startsWith(base) && method === "POST") {
-          if (!routes)
-            throw Object.assign(new Error("Not Found (404)"), { status: 404 });
           posts.push(path.slice(base.length));
           return "";
         }
@@ -893,16 +892,11 @@ describe("Insider Cat work board", () => {
     const patched = app.request.mock.calls.some(
       ([args]) => args.method === "PATCH",
     );
-    if (routes) {
-      expect(posts).toEqual(["resolve", "reopen"]);
-      expect(patched).toBe(false);
-    } else {
-      expect(posts).toEqual([]);
-      expect(patched).toBe(true);
-    }
+    expect(posts).toEqual(["resolve", "reopen"]);
+    expect(patched).toBe(false);
   });
 
-  it("resolves from the saved tags, keeps focus, reopens, and reports a failed update", async () => {
+  it("resolves through the project route, keeps focus, reopens, and reports a failed update", async () => {
     let saved = { team: "web", project: project.id.replace(/-/g, "") };
     let fail = false;
     const app = mountApp({
@@ -917,13 +911,15 @@ describe("Insider Cat work board", () => {
           };
         if (path === `/api/conversations/${worker.id}` && method === "GET")
           return { ...worker, execution_status: "finished", tags: saved };
-        // A server without the resolve and reopen routes.
-        if (method === "POST" && /\/(resolve|reopen)$/.test(path))
-          throw Object.assign(new Error("Not Found (404)"), { status: 404 });
-        if (method === "PATCH") {
+        const route = /\/conversations\/[^/]+\/(resolve|reopen)$/.exec(path);
+        if (method === "POST" && route) {
           if (fail) throw new Error("tag update refused");
-          saved = body.tags;
-          return { success: true };
+          if (route[1] === "resolve") saved = { ...saved, resolved: "user" };
+          else {
+            const { resolved, ...rest } = saved;
+            saved = rest;
+          }
+          return "";
         }
       }),
     });
@@ -933,9 +929,8 @@ describe("Insider Cat work board", () => {
     click(app, "resolve-worker");
     await waitFor(() =>
       expect(app.request).toHaveBeenCalledWith({
-        path: `/api/conversations/${worker.id}`,
-        method: "PATCH",
-        body: { tags: { ...saved, resolved: "user" } },
+        path: `/api/projects/${project.id}/conversations/${worker.id}/resolve`,
+        method: "POST",
       }),
     );
     // Resolved starts collapsed; focus follows the card to its group toggle.

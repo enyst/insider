@@ -39,9 +39,10 @@ work. Its Track control sends a conversation-metadata `PATCH` that replaces the
 tag set, so it re-sends existing tags. Tracking does not message or run the
 tracked conversation.
 
-Resolve and Reopen use the same read-then-`PATCH` path with the tag
-`resolved: user`, shared with Agent Server Projects (which may also write
-`resolved: auto`). Resolved work groups below live work unless its state needs
+Resolve and Reopen are a project's board state, so they appear only on a
+project's board and call `POST /api/projects/{id}/conversations/{cid}/resolve`
+or `/reopen`. Agent Server owns the `resolved` tag (`user` from these routes,
+`auto` from its own judge) and clears the resolve note on either call. Resolved work groups below live work unless its state needs
 the person or it is running again. Conversation IDs in the Cat's messages are read back with
 `GET /api/conversations/{id}` (at most six per refresh) and shown as cards.
 
