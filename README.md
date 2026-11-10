@@ -48,7 +48,8 @@ Voice sends spoken requests through the Agent Server's idle-only
 an Agent Server without it refuses to send them.
 See [CHANGELOG.md](CHANGELOG.md) for the release notes. Those Canvas and Agent
 Server PRs are not merged yet, so use builds of them, or pin a reviewed commit
-of this App that matches the builds you have.
+of this App that matches the builds you have. To build them from source, follow
+[docs/try-projects-locally.md](docs/try-projects-locally.md).
 
 ## Install in Canvas
 
@@ -98,7 +99,7 @@ dependencies or run a build.
   Projects may also set `resolved: auto` from a server-side check.
 - **Project files** appear under the work list when the chosen Cat is the
   coordinator of an Agent Server project. Files you add with **Add file** are
-  marked "Added by you", and files an agent saved with `save_project_artifact`
+  marked "Added by you", and files an agent saved with `write_artifact`
   are marked "Made by an agent", with the conversation that saved them. Text
   files (Markdown, text, JSON, CSV, YAML and similar) open in a preview; other
   types are listed without one. The section stays hidden on servers without
