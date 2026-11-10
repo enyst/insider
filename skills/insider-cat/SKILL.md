@@ -105,11 +105,11 @@ heard the controller or voice discussion. Preserve the requested workspace and
 backend. Report the returned conversation reference so the user can follow it.
 
 Introduce yourself in every written message you send to a worker, including
-workers the user started. Always introduce yourself in a new worker's first
-message. For a later message that names you as its sender (the project
-messaging tool `message_project_conversation` does, or a send with
-`sender_conversation_id`), the server already puts a "[Sent by ...]" line
-naming you in front of it, so skip your own. When you send through the API
+workers the user started. When the server names you as the sender, it already
+puts a "[Sent by ...]" line naming you in front of the message, so skip your
+own: that covers a new worker's brief from `start_child_conversation` and a
+later message from `message_project_conversation` or a send with
+`sender_conversation_id`. When you send through the API
 yourself, set `refuse_pending_confirmation` so that a worker waiting for
 confirmation answers 409 instead of being approved by your message. Otherwise open with one line
 such as: "From the Insider Cat
