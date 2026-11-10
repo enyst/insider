@@ -824,11 +824,22 @@ describe("Insider Cat work board", () => {
     expect(app.container.querySelector(".cat-cards").textContent).not.toBe("");
   });
 
-  it("moves a resolved card at once on a server-grouped board, and back on reopen", async () => {
+  it.each([
+    ["through the project's resolve and reopen routes", true],
+    ["through tags when the server has no such routes", false],
+  ])("moves a resolved card at once on a server-grouped board, and back on reopen, %s", async (_, routes) => {
     let saved = { project: project.id.replace(/-/g, "") };
     let membersReads = 0;
+    const posts = [];
     const app = mountApp({
       request: projectWorld([], ({ path, method, body }) => {
+        const base = `/api/projects/${project.id}/conversations/${worker.id}/`;
+        if (path.startsWith(base) && method === "POST") {
+          if (!routes)
+            throw Object.assign(new Error("Not Found (404)"), { status: 404 });
+          posts.push(path.slice(base.length));
+          return "";
+        }
         if (path.startsWith("/api/conversations/search"))
           return {
             items: [
@@ -879,6 +890,16 @@ describe("Insider Cat work board", () => {
     await waitFor(() =>
       expect(groups(app)).toEqual([["finished", [worker.title]]]),
     );
+    const patched = app.request.mock.calls.some(
+      ([args]) => args.method === "PATCH",
+    );
+    if (routes) {
+      expect(posts).toEqual(["resolve", "reopen"]);
+      expect(patched).toBe(false);
+    } else {
+      expect(posts).toEqual([]);
+      expect(patched).toBe(true);
+    }
   });
 
   it("resolves from the saved tags, keeps focus, reopens, and reports a failed update", async () => {
@@ -896,6 +917,9 @@ describe("Insider Cat work board", () => {
           };
         if (path === `/api/conversations/${worker.id}` && method === "GET")
           return { ...worker, execution_status: "finished", tags: saved };
+        // A server without the resolve and reopen routes.
+        if (method === "POST" && /\/(resolve|reopen)$/.test(path))
+          throw Object.assign(new Error("Not Found (404)"), { status: 404 });
         if (method === "PATCH") {
           if (fail) throw new Error("tag update refused");
           saved = body.tags;

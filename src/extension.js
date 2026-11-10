@@ -736,21 +736,53 @@ export function activate(host) {
           workspaceDiscoveryReady = true;
           renderWorkspaces();
         }
-        async function updateTags(c, nextTags, focusAction, stillValid) {
+        async function setResolved(c, resolved, focusAction) {
           if (tracking.has(c.id)) return;
           tracking.add(c.id);
           renderBoard();
           let announce = null;
           try {
-            // A tag update replaces the whole set: start from the saved tags.
-            const fresh = await request(detailPath(c.id));
-            if (!alive || !stillValid()) return;
-            const tags = nextTags(fresh?.tags);
-            await request(detailPath(c.id), "PATCH", { tags });
+            // A project's member resolves and reopens through the server's
+            // own routes; Agent Server keeps the board keys in tags as it has
+            // them, so a tag PATCH is only for servers without those routes.
+            // Any card on a project board tries the route; a 404 (not a
+            // member, or a server without the route) or 405 falls back.
+            const viaServer = Boolean(boardProject);
+            let done = false;
+            let fresh = null;
+            if (viaServer) {
+              try {
+                await request(
+                  `/api/projects/${encodeURIComponent(boardProject.id)}/conversations/${encodeURIComponent(c.id)}/${resolved ? "resolve" : "reopen"}`,
+                  "POST",
+                );
+                done = true;
+              } catch (error) {
+                const status = httpStatus(error);
+                if (status !== 404 && status !== 405) throw error;
+              }
+            }
             if (!alive) return;
-            board = board.map((item) =>
-              item.id === c.id ? { ...item, ...fresh, tags } : item,
-            );
+            let tags = null;
+            if (!done) {
+              // A tag update replaces the whole set: start from the saved tags.
+              fresh = await request(detailPath(c.id));
+              if (!alive) return;
+              tags = resolvedTags(fresh?.tags, resolved);
+              await request(detailPath(c.id), "PATCH", { tags });
+              if (!alive) return;
+            }
+            // Build from the item as it stands now: a refresh may have
+            // brought newer tags while the request was out.
+            board = board.map((item) => {
+              if (item.id !== c.id) return item;
+              if (tags) return { ...item, ...(fresh || {}), tags };
+              const next = resolvedTags(item.tags, resolved);
+              delete next.resolvenote;
+              return { ...item, tags: next };
+            });
+            // A members read that started before this change is stale.
+            serverBoardGeneration += 1;
             // The server's members list moves the card too, until the next
             // read confirms it.
             if (serverBoard)
@@ -758,7 +790,7 @@ export function activate(host) {
                 ...serverBoard,
                 conversations: serverBoard.conversations.map((m) =>
                   idKey(m.conversation_id) === idKey(c.id)
-                    ? withResolved(m, tags.resolved || null)
+                    ? withResolved(m, resolved ? "user" : null)
                     : m,
                 ),
               };
@@ -1128,12 +1160,7 @@ export function activate(host) {
           resolve.addEventListener(
             "click",
             () =>
-              void updateTags(
-                c,
-                (tags) => resolvedTags(tags, !resolved),
-                "resolve-worker",
-                () => true,
-              ),
+              void setResolved(c, !resolved, "resolve-worker"),
           );
           buttons.append(resolve);
           const pr = boardProject && pullRequests.get(idKey(c.id));
