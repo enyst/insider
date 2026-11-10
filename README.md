@@ -25,31 +25,30 @@ You need **Agent Canvas** with a **local Agent Server** and an active OpenHands
 agent profile. Canvas Apps do not support cloud backends.
 
 1. Open **Customize → Apps → Add app**, set **App source** to
-   `github:enyst/insider`, **Ref** to `gpt/insider-voice-discovery`, and leave
-   **Path** empty. Review and enable **Insider Cat**.
-2. Open **Projects** at `/extensions/insider-cat/projects`.
-3. Select **New project** and choose a **Workspace** for the Cat. If none
+   `github:enyst/insider`, **Ref** to `main`, and leave **Path** empty. Review
+   and enable **Insider Cat**.
+2. Turn on **Projects** in **Settings → Experimental**.
+3. Open **Projects** at `/extensions/insider-cat/projects`.
+4. Select **New project** and choose a **Workspace** for the Cat. If none
    appears, add one in Canvas and refresh.
-4. Type a message and click **Send**. Your first message creates and starts the
+5. Type a message and click **Send**. Your first message creates and starts the
    Cat.
 
 Then try **Talk** for Voice ([setup](#voice)).
 
-The development branch `gpt/insider-voice-discovery` holds the 0.2.0-beta.1 **Projects**
-release, App PRs [#5](https://github.com/enyst/insider/pull/5) through
-[#27](https://github.com/enyst/insider/pull/27), paired with
+`main` holds the 0.2.0-beta.1 **Projects** release and everything since, paired with
 [Canvas #19495](https://github.com/OpenHands/OpenHands/pull/19495)
 and [Agent Server #5180](https://github.com/OpenHands/software-agent-sdk/pull/5180).
 Projects (conversation sender, reactions, resolved state, the `ask` tag, and
 coordinator message copies) come from
-[Agent Server #6602](https://github.com/OpenHands/software-agent-sdk/pull/6602).
+[Agent Server #6602](https://github.com/OpenHands/software-agent-sdk/pull/6602),
+behind the experimental `projects` flag.
 Voice sends spoken requests through the Agent Server's idle-only
 `POST .../voice/messages` from [#5180](https://github.com/OpenHands/software-agent-sdk/pull/5180);
 an Agent Server without it refuses to send them.
-See [CHANGELOG.md](CHANGELOG.md) for the release notes. The release remains a
-draft; `main` does not yet contain the companion and Voice behavior described
-below. Install the reviewed feature branch or a pinned commit with compatible
-Canvas and Agent Server builds.
+See [CHANGELOG.md](CHANGELOG.md) for the release notes. Those Canvas and Agent
+Server PRs are not merged yet, so use builds of them, or pin a reviewed commit
+of this App that matches the builds you have.
 
 ## Install in Canvas
 
@@ -58,7 +57,7 @@ Open **Customize → Apps → Add app** and enter:
 | Field      | Value                                                  |
 | ---------- | ------------------------------------------------------ |
 | App source | `github:enyst/insider`                                   |
-| Ref        | `gpt/insider-voice-discovery`, or a reviewed commit SHA   |
+| Ref        | `main`, or a reviewed commit SHA                          |
 | Path       | Leave empty                                            |
 
 Installation starts disabled. Review and enable **Insider Cat**, then open
