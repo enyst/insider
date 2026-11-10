@@ -923,6 +923,9 @@ describe("Insider Cat work board", () => {
     find(app, "group-resolved").click();
     expect(document.activeElement).toBe(find(app, "group-resolved"));
     expect(find(app, "resolve-worker").textContent).toBe("Reopen");
+    expect(find(app, "resolve-worker").getAttribute("aria-label")).toBe(
+      `Reopen ${worker.title}`,
+    );
     fail = true;
     click(app, "resolve-worker");
     await waitFor(() =>

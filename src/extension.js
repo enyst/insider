@@ -1113,7 +1113,7 @@ export function activate(host) {
           const link = document.createElement("button");
           link.dataset.action = "open-worker";
           link.textContent = t("open");
-          link.setAttribute("aria-label", `${t("open")} ${name}`);
+          link.setAttribute("aria-label", t("openNamed", { title: name }));
           link.addEventListener("click", () => open(c.id));
           buttons.append(link);
           const resolved = isResolved(c);
@@ -1122,7 +1122,7 @@ export function activate(host) {
           resolve.textContent = t(resolved ? "reopen" : "resolve");
           resolve.setAttribute(
             "aria-label",
-            `${t(resolved ? "reopen" : "resolve")} ${name}`,
+            t(resolved ? "reopenNamed" : "resolveNamed", { title: name }),
           );
           resolve.disabled = tracking.has(c.id);
           resolve.addEventListener(

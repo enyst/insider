@@ -7,22 +7,27 @@ Notable changes to Insider Cat, newest first.
 - Talk and dictate from beside Send: real-time voice moved to a waveform button next to Send, plus a microphone that dictates into your draft ([#34](https://github.com/enyst/insider/pull/34)).
 - A friendlier first run: empty boards welcome you with a hint, and the empty Cat panel suggests starter prompts ([#37](https://github.com/enyst/insider/pull/37), [#47](https://github.com/enyst/insider/pull/47)).
 - Easier to get started: a plain-language "What is Insider?" section and a "Try it in 5 minutes" quick start ([#46](https://github.com/enyst/insider/pull/46), [#35](https://github.com/enyst/insider/pull/35), [#39](https://github.com/enyst/insider/pull/39)).
+- The board's Open, Resolve and Reopen labels for screen readers now fit each language's word order while keeping the visible button text whole, and the "opens in a new tab" hint is translated; a test now keeps every string translated into all 15 languages.
 
 ## [0.2.0-beta.1] - 2026-11-09
 
 The Projects work board release: a Cat-first board that groups conversations by
 what they need from the person, with live conversation cards, project files,
-reactions and message folding, and coordinated work. The board is now fully
-usable with a keyboard and a screen reader, and every Insider string is
-translated into 15 languages. This beta precedes the stable 0.2.0.
+reactions and message folding, and coordinated work. The board is easier to
+use with a screen reader, and every Insider string is translated into 15
+languages. This beta precedes the stable 0.2.0.
 
 ### Added
 
-- Make the work board fully usable with a keyboard and a screen reader:
-  focusable cards, ARIA roles and labels, and keyboard navigation.
+- Make the work board easier to use with a screen reader: card titles are
+  headings, groups are labelled disclosures, Open and Resolve name their
+  conversation, PR links say they open a new tab, and resolving or reopening
+  is announced. Links now show a keyboard focus ring
+  ([#29](https://github.com/enyst/insider/pull/29)).
 - Translate every Insider string into 15 languages: Arabic, Catalan, German,
   English, Spanish, French, Italian, Japanese, Korean, Norwegian, Portuguese,
-  Turkish, Ukrainian, Simplified Chinese, and Traditional Chinese.
+  Turkish, Ukrainian, Simplified Chinese, and Traditional Chinese
+  ([#28](https://github.com/enyst/insider/pull/28)).
 - Redesign Insider around an expressive Cat and integrated Voice, with accurate
   Voice failures and Voice kept discoverable before a Cat is selected
   ([#2](https://github.com/enyst/insider/pull/2)).
@@ -68,10 +73,9 @@ translated into 15 languages. This beta precedes the stable 0.2.0.
   ([#11](https://github.com/enyst/insider/pull/11)).
 - Send spoken requests through idle-only server admission
   ([#13](https://github.com/enyst/insider/pull/13)).
-- Clamp long asks on conversation cards
-  ([#17](https://github.com/enyst/insider/pull/17)).
-- Make card asks fully readable instead of clamping
-  ([#21](https://github.com/enyst/insider/pull/21)).
+- Show a conversation card's whole ask, wrapped, instead of a clamped line
+  ([#17](https://github.com/enyst/insider/pull/17),
+  [#21](https://github.com/enyst/insider/pull/21)).
 - Read PR status from the reviewed route
   ([#27](https://github.com/enyst/insider/pull/27)).
 - Resume legacy Insider Cats in the app and Voice.
