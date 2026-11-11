@@ -37,8 +37,7 @@ describe("attention groups", () => {
     expect(groups.map((g) => [g.id, g.items.map((c) => c.id)])).toEqual([
       ["needsYou", ["c", "e", "h", "i"]],
       ["working", ["b"]],
-      ["finished", ["d"]],
-      ["idle", ["a"]],
+      ["idle", ["a", "d"]],
       ["other", ["f", "g"]],
     ]);
   });
@@ -138,7 +137,7 @@ describe("asks", () => {
     expect(groups.map((g) => [g.id, g.items.map((c) => c.id)])).toEqual([
       ["needsYou", ["a", "b"]],
       ["working", ["c"]],
-      ["finished", ["e"]],
+      ["idle", ["e"]],
       ["resolved", ["d"]],
     ]);
     expect(askOf(item("a", "finished", asked()))).toBe(

@@ -332,7 +332,7 @@ describe("Insider Cat work board", () => {
       expect(groups(app)).toEqual([
         ["needsYou", [serverOnly.title]],
         ["working", [running.title]],
-        ["idle", []],
+        ["idle", [idle.title]],
       ]),
     );
   });
@@ -355,20 +355,21 @@ describe("Insider Cat work board", () => {
     );
   });
 
-  it("groups the project's work by what it needs and collapses idle work", async () => {
+  it("groups the project's work by what it needs and shows idle work open", async () => {
     const app = mountApp({
       request: projectWorld([member(idle), member(running), member(worker)]),
     });
     await waitFor(() => expect(groups(app).length).toBe(3));
+    // Idle is not done (Resolved is): it stays open to check.
     expect(groups(app)).toEqual([
       ["needsYou", [worker.title]],
       ["working", [running.title]],
-      ["idle", []],
+      ["idle", [idle.title]],
     ]);
     const idleHead = find(app, "group-idle");
-    expect(idleHead.getAttribute("aria-expanded")).toBe("false");
+    expect(idleHead.getAttribute("aria-expanded")).toBe("true");
     idleHead.click();
-    expect(groups(app)[2]).toEqual(["idle", [idle.title]]);
+    expect(groups(app)[2]).toEqual(["idle", []]);
   });
 
   it("exposes card actions and groups to assistive technology", async () => {
@@ -864,7 +865,7 @@ describe("Insider Cat work board", () => {
                 conversation_id: worker.id,
                 title: worker.title,
                 execution_status: "finished",
-                attention: "finished",
+                attention: "idle",
                 resolved: null,
                 turn: null,
                 ask: null,
@@ -878,7 +879,7 @@ describe("Insider Cat work board", () => {
     });
     await waitFor(() => expect(membersReads).toBeGreaterThan(0));
     await waitFor(() =>
-      expect(groups(app)).toEqual([["finished", [worker.title]]]),
+      expect(groups(app)).toEqual([["idle", [worker.title]]]),
     );
     click(app, "resolve-worker");
     await waitFor(() => expect(groups(app)).toEqual([["resolved", []]]));
@@ -887,7 +888,7 @@ describe("Insider Cat work board", () => {
     expect(find(app, "resolve-worker").textContent).toBe("Reopen");
     click(app, "resolve-worker");
     await waitFor(() =>
-      expect(groups(app)).toEqual([["finished", [worker.title]]]),
+      expect(groups(app)).toEqual([["idle", [worker.title]]]),
     );
     const patched = app.request.mock.calls.some(
       ([args]) => args.method === "PATCH",
@@ -924,7 +925,7 @@ describe("Insider Cat work board", () => {
       }),
     });
     await waitFor(() =>
-      expect(groups(app)).toEqual([["finished", [worker.title]]]),
+      expect(groups(app)).toEqual([["idle", [worker.title]]]),
     );
     click(app, "resolve-worker");
     await waitFor(() =>
@@ -963,7 +964,7 @@ describe("Insider Cat work board", () => {
     );
     expect(
       app.container.querySelector('[data-role="board-status"]').textContent,
-    ).toBe("Review the project — Finished, ready to check");
+    ).toBe("Review the project — Idle");
   });
 
   it.each([

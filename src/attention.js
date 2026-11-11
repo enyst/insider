@@ -6,12 +6,12 @@ export const ATTENTION_GROUPS = [
     statuses: ["waiting_for_confirmation", "paused", "error", "stuck"],
   },
   { id: "working", statuses: ["running"] },
-  // An ended run is not a claim that the task succeeded: it is ready to check.
-  { id: "finished", statuses: ["finished"] },
-  { id: "idle", statuses: ["idle"] },
+  // Nothing runs and nothing waits on the person, but it is not resolved:
+  // an ended run is not a claim that the task succeeded. Resolved is done.
+  { id: "idle", statuses: ["finished", "idle"] },
 ];
 // Groups that start collapsed because they rarely need the person.
-export const COLLAPSED_GROUPS = new Set(["idle", "resolved"]);
+export const COLLAPSED_GROUPS = new Set(["resolved"]);
 
 // Shared with Agent Server Projects: "user" from the Resolve button, "auto"
 // from a server-side hook. Resolved wins over every state except needs-you
@@ -49,7 +49,6 @@ const SERVER_GROUPS = {
   needs_you: "needsYou",
   needs_input: "needsYou",
   working: "working",
-  finished: "finished",
   idle: "idle",
   resolved: "resolved",
 };
@@ -65,15 +64,13 @@ export function withResolved(member, resolved) {
   if (resolved) return { ...next, attention: "resolved" };
   const status = member.execution_status;
   next.attention =
-    status === "finished"
-      ? member.turn === "asked"
-        ? "needs_input"
-        : "finished"
-      : status === "idle"
+    status === "finished" && member.turn === "asked"
+      ? "needs_input"
+      : status === "finished" ||
+          status === "idle" ||
+          member.attention === "resolved"
         ? "idle"
-        : member.attention === "resolved"
-          ? "idle"
-          : member.attention;
+        : member.attention;
   return next;
 }
 
