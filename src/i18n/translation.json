@@ -1801,23 +1801,6 @@
     "uk": "Виконується",
     "ca": "En curs"
   },
-  "INSIDER_CAT$GROUP_FINISHED": {
-    "en": "Finished, ready to check",
-    "zh-CN": "已结束，待检查",
-    "de": "Beendet, bitte prüfen",
-    "ko-KR": "종료됨, 확인 필요",
-    "no": "Ferdig, klar til sjekk",
-    "zh-TW": "已結束，待檢查",
-    "it": "Terminato, da controllare",
-    "pt": "Concluído, pronto para verificar",
-    "es": "Terminado, listo para revisar",
-    "ar": "انتهى، جاهز للمراجعة",
-    "fr": "Terminé, à vérifier",
-    "tr": "Bitti, kontrol edilmeli",
-    "ja": "終了、確認待ち",
-    "uk": "Завершено, варто перевірити",
-    "ca": "Acabat, a punt per revisar"
-  },
   "INSIDER_CAT$GROUP_IDLE": {
     "en": "Idle",
     "zh-CN": "空闲",

@@ -87,8 +87,9 @@ dependencies or run a build.
   coverage. Approval requests, errors, paused work, and ended runs have distinct
   labels. An ended run is not a claim that a task succeeded.
 - Group loaded work by what it needs from you: **Needs you** (approval
-  requests, paused, errors, stuck), **Working**, **Finished, ready to check**,
-  **Idle**, which starts collapsed, and **Other** for any other state. Once a
+  requests, paused, errors, stuck), **Working**, **Idle** (ended or never run,
+  not resolved: check it), **Resolved** (done), which starts collapsed, and
+  **Other** for any other state. Once a
   Cat is chosen, **This Cat's work** narrows the list to conversations tracked by that Cat: workers it tagged
   with `insidercat`, ones you added with **Track with Cat**, and its own
   sub-conversations. Tracking only edits tags; it never messages the work.
