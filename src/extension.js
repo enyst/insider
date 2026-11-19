@@ -127,19 +127,6 @@ function supportsControllerLaunch(schema) {
   );
 }
 
-// A server that can start a project's coordinator with the Cat's own launch
-// fields, so the Cat gets the coordinator's project tools.
-export function supportsCoordinatorLaunch(schema) {
-  const coordinator = resolveSchema(
-    schema,
-    requestBodySchema(schema, "/api/projects")?.properties?.coordinator,
-  );
-  return Boolean(
-    coordinator?.properties?.conversation_id &&
-    coordinator?.properties?.agent_launch_additions,
-  );
-}
-
 // Agent Server marks a message another conversation sent with
 // sender "conversation:<id>" and puts a header for the agent in front of it.
 const SENDER_PREFIX = "conversation:";
@@ -1137,8 +1124,7 @@ export function activate(host) {
           resolve.disabled = tracking.has(c.id);
           resolve.addEventListener(
             "click",
-            () =>
-              void setResolved(c, !resolved, "resolve-worker"),
+            () => void setResolved(c, !resolved, "resolve-worker"),
           );
           // Only a project's members can be resolved.
           if (boardProject) buttons.append(resolve);
@@ -1862,16 +1848,23 @@ export function activate(host) {
               // coordinator, which gives it the project tools; a Cat linked
               // to a project afterwards would lack them. A server with
               // Projects off answers 404, and the Cat works from tags.
-              // A server without that start keeps the Cat out of projects.
+              // The projects routes are experimental and left out of the
+              // OpenAPI schema, so the 404 is the only signal.
               let info = null;
               let project = null;
-              if (!projectsOff && supportsCoordinatorLaunch(schema)) {
+              if (!projectsOff) {
+                // The server picks the coordinator's id. After a lost
+                // response the Cat is found again by its tags, not by id.
+                const coordinatorLaunch = { ...launch };
+                delete coordinatorLaunch.conversation_id;
+                const reserved = state.controller;
+                state.controller = null;
                 try {
                   project = await request("/api/projects", "POST", {
                     name: projectNameFrom(text),
                     description: text.slice(0, PROJECT_GOAL_MAX),
                     coordinator: {
-                      ...launch,
+                      ...coordinatorLaunch,
                       working_dir: controllerWorkspace,
                       title: t("cat"),
                     },
@@ -1879,18 +1872,19 @@ export function activate(host) {
                 } catch (error) {
                   if (isNotFound(error)) {
                     projectsOff = true;
+                    state.controller = reserved;
                   } else {
                     // The server answered: a failed start leaves no project
                     // and no Cat, so nothing is uncertain.
-                    if (httpStatus(error) !== undefined) {
-                      submitted = false;
-                      state.controller = null;
-                    }
+                    if (httpStatus(error) !== undefined) submitted = false;
                     throw error;
                   }
                 }
                 if (!alive) return;
-                if (project) info = await request(detailPath(id));
+                if (project)
+                  info = await request(
+                    detailPath(project.coordinator_conversation_id),
+                  );
               }
               info ||= await request("/api/conversations", "POST", {
                 ...launch,
