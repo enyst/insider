@@ -22,7 +22,6 @@ const COORDINATOR_FIELDS = [
   "working_dir",
   "agent_profile_id",
   "title",
-  "conversation_id",
   "tags",
   "conversation_runtime",
   "agent_launch_additions",
@@ -81,42 +80,6 @@ function mountApp(overrides = {}) {
               },
             },
           },
-          ...(overrides.coordinatorLaunch === false
-            ? {}
-            : {
-                "/api/projects": {
-                  post: {
-                    requestBody: {
-                      content: {
-                        "application/json": {
-                          schema: {
-                            $ref: "#/components/schemas/CreateProjectRequest",
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              }),
-        },
-        components: {
-          schemas: {
-            CreateProjectRequest: {
-              properties: {
-                coordinator: {
-                  anyOf: [
-                    { $ref: "#/components/schemas/NewProjectCoordinator" },
-                    { type: "null" },
-                  ],
-                },
-              },
-            },
-            NewProjectCoordinator: {
-              properties: Object.fromEntries(
-                COORDINATOR_FIELDS.map((field) => [field, {}]),
-              ),
-            },
-          },
         },
       };
     }
@@ -133,10 +96,15 @@ function mountApp(overrides = {}) {
           COORDINATOR_FIELDS.includes(field),
         ),
       );
+      // The server picks the coordinator's id.
       const info = await request({
         path: "/api/conversations",
         method: "POST",
-        body: { ...launch, workspace: { working_dir } },
+        body: {
+          ...launch,
+          conversation_id: crypto.randomUUID(),
+          workspace: { working_dir },
+        },
       });
       return {
         id: "55555555-5555-4555-8555-555555555555",
@@ -2007,7 +1975,6 @@ describe("Insider Cat App", () => {
       name: "Explain this work.",
       description: "Explain this work.",
       coordinator: {
-        conversation_id: create.body.conversation_id,
         working_dir: "/projects/example",
         tags: controller.tags,
         agent_profile_id: "33333333-3333-4333-8333-333333333333",
@@ -2015,6 +1982,9 @@ describe("Insider Cat App", () => {
     });
     expect(calls[projectCreate].body).not.toHaveProperty(
       "coordinator_conversation_id",
+    );
+    expect(calls[projectCreate].body.coordinator).not.toHaveProperty(
+      "conversation_id",
     );
     const firstSend = calls.findIndex(
       (call) =>
@@ -2145,26 +2115,6 @@ describe("Insider Cat App", () => {
         /\/api\/conversations\/[^/]+\/events$/.test(call.path),
       ),
     ).toBe(false);
-  });
-
-  it("starts the Cat outside projects on a server that cannot start a coordinator", async () => {
-    const app = mountApp({ coordinatorLaunch: false });
-    await waitFor(() =>
-      expect(find(app, "workspace").value).toBe(worker.workspace.working_dir),
-    );
-    draft(app, "Explain this work.");
-    click(app, "send");
-    await waitFor(() => expect(find(app, "send").disabled).toBe(false));
-    const calls = app.request.mock.calls.map(([call]) => call);
-    expect(
-      calls.some(
-        (call) => call.method === "POST" && call.path === "/api/projects",
-      ),
-    ).toBe(false);
-    const create = calls.find(
-      (call) => call.method === "POST" && call.path === "/api/conversations",
-    );
-    expect(create.body.initial_message).toMatchObject({ run: true });
   });
 
   it("adds only its owning backend's advertised runtime context without replacing the active profile", async () => {
