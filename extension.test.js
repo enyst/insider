@@ -1986,6 +1986,14 @@ describe("Insider Cat App", () => {
     expect(calls[projectCreate].body.coordinator).not.toHaveProperty(
       "conversation_id",
     );
+    // The server picks the Cat's id, so its prompt claims no reserved one.
+    const catSuffix =
+      calls[projectCreate].body.coordinator.agent_launch_additions
+        .system_message_suffix_append;
+    expect(catSuffix).toContain(
+      "Controller ID: your conversation id, as the <PROJECT> block names it.",
+    );
+    expect(catSuffix).not.toMatch(/Controller ID: [0-9a-f]{8}-/);
     const firstSend = calls.findIndex(
       (call) =>
         call.method === "POST" &&
@@ -2235,6 +2243,36 @@ describe("Insider Cat App", () => {
     expect(find(app, "send").disabled).toBe(true);
     app.cleanup();
     expect(app.container.childElementCount).toBe(0);
+  });
+
+  it("keeps a new project's Cat when reading it fails", async () => {
+    let catId;
+    const app = mountApp({
+      request: ({ path, method, body }) => {
+        if (
+          path === "/api/conversations" &&
+          method === "POST" &&
+          body?.agent_profile_id
+        )
+          catId = body.conversation_id;
+        if (catId && method === "GET" && path === `/api/conversations/${catId}`)
+          throw Object.assign(new Error("Unavailable"), { status: 503 });
+      },
+    });
+    await waitFor(() =>
+      expect(find(app, "workspace").value).toBe(worker.workspace.working_dir),
+    );
+    draft(app, "Plan the release.");
+    click(app, "send");
+    await waitFor(() =>
+      expect(app.container.textContent).toContain(
+        "Check the conversation before sending again",
+      ),
+    );
+    expect(catId).toBeTruthy();
+    // The Cat stays known, so the user can open it and check.
+    expect(find(app, "open-controller").hidden).toBe(false);
+    expect(find(app, "draft").value).toBe("Plan the release.");
   });
 
   it("keeps an in-flight creation locked across page navigation and reconciles its result", async () => {

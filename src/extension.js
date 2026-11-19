@@ -1829,19 +1829,24 @@ export function activate(host) {
                 runtimeInfo.available_conversation_runtimes?.includes("local")
                   ? { conversation_runtime: "local" }
                   : {};
+              // A project's coordinator gets its id from the server, which
+              // names it in the coordinator's <PROJECT> block.
+              const controllerSuffix = (identity) => ({
+                system_message_suffix_append: [
+                  buildRuntimeServicesSuffix(runtimeInfo),
+                  `<INSIDER_CONTROLLER>\nThe runtime identifies this conversation as the active Insider Cat controller. Backend: ${host.backend.id}. ${identity}\nThe Apps page shows the person this Cat's project: its conversations grouped by what they need, and its files. Canvas may relay voice requests into this same durable conversation. This conversation has only its configured profile tools; the voice transport is not an additional agent tool. No shared SmolPaws memory or scheduler is added by this App. Only claim operations supported by your actual tools.\n\n${INSIDER_INSTRUCTIONS}\n</INSIDER_CONTROLLER>`,
+                ]
+                  .filter(Boolean)
+                  .join("\n\n"),
+              });
               const launch = {
                 conversation_id: id,
                 agent_profile_id: profile.id,
                 ...runtime,
                 tags: CONTROLLER_TAGS,
-                agent_launch_additions: {
-                  system_message_suffix_append: [
-                    buildRuntimeServicesSuffix(runtimeInfo),
-                    `<INSIDER_CONTROLLER>\nThe runtime identifies this conversation as the active Insider Cat controller. Backend: ${host.backend.id}. Controller ID: ${id}.\nThe Apps page shows the person this Cat's project: its conversations grouped by what they need, and its files. Canvas may relay voice requests into this same durable conversation. This conversation has only its configured profile tools; the voice transport is not an additional agent tool. No shared SmolPaws memory or scheduler is added by this App. Only claim operations supported by your actual tools.\n\n${INSIDER_INSTRUCTIONS}\n</INSIDER_CONTROLLER>`,
-                  ]
-                    .filter(Boolean)
-                    .join("\n\n"),
-                },
+                agent_launch_additions: controllerSuffix(
+                  `Controller ID: ${id}.`,
+                ),
                 ...creationPolicy(settings),
               };
               // With Projects, the server starts the Cat as the project's
@@ -1855,7 +1860,12 @@ export function activate(host) {
               if (!projectsOff) {
                 // The server picks the coordinator's id. After a lost
                 // response the Cat is found again by its tags, not by id.
-                const coordinatorLaunch = { ...launch };
+                const coordinatorLaunch = {
+                  ...launch,
+                  agent_launch_additions: controllerSuffix(
+                    "Controller ID: your conversation id, as the <PROJECT> block names it.",
+                  ),
+                };
                 delete coordinatorLaunch.conversation_id;
                 const reserved = state.controller;
                 state.controller = null;
@@ -1881,10 +1891,18 @@ export function activate(host) {
                   }
                 }
                 if (!alive) return;
-                if (project)
+                if (project) {
+                  // Known now, as a reserved id is: a failed read below
+                  // leaves the Cat to be found again, not lost.
+                  state.controller = {
+                    id: project.coordinator_conversation_id,
+                    tags: CONTROLLER_TAGS,
+                    execution_status: "idle",
+                  };
                   info = await request(
                     detailPath(project.coordinator_conversation_id),
                   );
+                }
               }
               info ||= await request("/api/conversations", "POST", {
                 ...launch,
